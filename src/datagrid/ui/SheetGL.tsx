@@ -19,7 +19,7 @@ import {
   SavingEvent,
   SavedEvent,
 } from '../types/grid';
-import { IDataStore, BatchChanges } from '../types/store';
+import { IDataStore, BatchChanges, RemoteOperationsConfig } from '../types/store';
 import { ColumnFilterState, FilterDescriptor, SortDescriptor } from '../types/filter';
 import { GroupDescriptor, SummaryType } from '../types/group';
 import { IGridThemeTokens } from '../theme/IGridTheme';
@@ -80,6 +80,13 @@ export interface SheetGLProps {
   onSelectionChanged?: (selectedRowKeys: any[], selectedRowsData: any[]) => void;
   onPermissionsChange?: (permissions: GridPermissions) => void;
   onCellChange?: (row: any, columnId: string, value: any) => void;
+  /** DevExtreme-style remote operations configuration */
+  remoteOperations?: boolean | RemoteOperationsConfig;
+  /** Filter change callback */
+  onFilterChange?: (
+    filter: FilterDescriptor | null,
+    columnFilters: Record<string, ColumnFilterState>
+  ) => void;
 
   // Enterprise Lifecycle Event Triggers
   onEditingStart?: (e: EditingStartEvent) => void;
@@ -165,6 +172,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   onRowRemoved,
   onSaving,
   onSaved,
+  remoteOperations,
+  onFilterChange,
   style,
   className,
 }) => {
@@ -1517,7 +1526,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     });
   };
 
-  const handleApplyColumnFilter = (colId: string, filterState: ColumnFilterState | null) => {
+  const handleApplyColumnFilter = async (colId: string, filterState: ColumnFilterState | null) => {
     const next = { ...columnFilters };
     if (!filterState) {
       delete next[colId];
@@ -1527,7 +1536,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     setColumnFilters(next);
 
     const compiled = compileColumnFilters(next);
-    store.setFilter(compiled);
+    await store.setFilter(compiled);
 
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
@@ -1556,17 +1565,19 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         'info'
       );
     }
+    onFilterChange?.(compiled, next);
   };
 
-  const handleClearAllFilters = () => {
+  const handleClearAllFilters = async () => {
     setColumnFilters({});
-    store.setFilter(null);
+    await store.setFilter(null);
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
     }
     scrollPosRef.current.top = 0;
     setStoreVersion((v) => v + 1);
     requestRender();
+    onFilterChange?.(null, {});
   };
 
   const handleUpdateColumnDef = (colId: string, patch: Partial<ColumnDef>) => {
@@ -2959,9 +2970,11 @@ export const SheetGL: React.FC<SheetGLProps> = ({
           onLocaleChange?.(resolved.code.startsWith('tr') ? 'tr' : 'en', resolved);
         }}
         searchKeyword={searchKeyword}
-        onSearchChange={(k) => {
+        onSearchChange={async (k) => {
           setSearchKeyword(k);
-          store.setSearch(k);
+          await store.setSearch(k);
+          setStoreVersion((v) => v + 1);
+          requestRender();
         }}
         onExportCsv={exportCsv}
         groups={groups.map((g) => g.selector)}

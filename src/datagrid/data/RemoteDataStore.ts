@@ -1,14 +1,28 @@
-import { IDataStore, BatchChanges, RemoteOperationsConfig } from '../types/store';
+import {
+  IDataStore,
+  BatchChanges,
+  RemoteOperationsConfig,
+  DataGridQuery,
+  LoadResult,
+} from '../types/store';
 import { FilterDescriptor, SortDescriptor, DistinctItem } from '../types/filter';
-import { GroupDescriptor, VirtualRow } from '../types/group';
+import { GroupDescriptor, VirtualRow, SummaryType } from '../types/group';
 import { BlockCache } from './BlockCache';
 
 export interface RemoteDataStoreOptions {
-  url: string;
+  url?: string;
   keyField?: string;
   remoteOperations?: RemoteOperationsConfig;
   headers?: Record<string, string>;
   blockSize?: number;
+  /** Custom loader function for advanced environments (e.g. Qmi custom API client) */
+  load?: (query: DataGridQuery) => Promise<LoadResult>;
+  /** Custom distinct value loader for remote column filters */
+  loadDistinct?: (columnId: string, search?: string) => Promise<DistinctItem[]>;
+  /** Custom single cell updater */
+  update?: (key: any, values: Record<string, any>) => Promise<void>;
+  /** Custom batch changes committer */
+  commit?: (changes: BatchChanges) => Promise<void>;
 }
 
 export class RemoteDataStore implements IDataStore {
@@ -16,6 +30,10 @@ export class RemoteDataStore implements IDataStore {
   private keyField: string;
   private headers: Record<string, string>;
   private cache: BlockCache<any>;
+  private customLoad?: (query: DataGridQuery) => Promise<LoadResult>;
+  private customLoadDistinct?: (columnId: string, search?: string) => Promise<DistinctItem[]>;
+  private customUpdate?: (key: any, values: Record<string, any>) => Promise<void>;
+  private customCommit?: (changes: BatchChanges) => Promise<void>;
 
   private totalCount: number = 0;
   private summaries?: Record<string, number>;
@@ -29,10 +47,17 @@ export class RemoteDataStore implements IDataStore {
   private listeners = new Map<string, Set<(...args: any[]) => void>>();
 
   constructor(options: RemoteDataStoreOptions) {
-    this.url = options.url;
+    this.url = options.url || '';
     this.keyField = options.keyField || 'id';
     this.headers = options.headers || { 'Content-Type': 'application/json' };
-    this.cache = new BlockCache<any>(options.blockSize || 50, 30);
+    this.cache = new BlockCache<any>(options.blockSize || 100, 50);
+    this.customLoad = options.load;
+    this.customLoadDistinct = options.loadDistinct;
+    this.customUpdate = options.update;
+    this.customCommit = options.commit;
+
+    // Immediately trigger initial load of block 0
+    this.fetchBlock(0).catch(() => {});
   }
 
   public isRemote(): boolean {
@@ -43,9 +68,26 @@ export class RemoteDataStore implements IDataStore {
     return this.totalCount;
   }
 
+  public getTotalCount(): number {
+    return this.totalCount;
+  }
+
+  public setTotalCount(count: number): void {
+    this.totalCount = count;
+    this.emit('loaded');
+  }
+
   public getViewRow(rowIndex: number): VirtualRow | undefined {
     const data = this.cache.getRow(rowIndex);
-    if (!data) return undefined;
+    if (!data) {
+      if (this.totalCount > 0 && rowIndex < this.totalCount) {
+        this.ensureRange(
+          rowIndex,
+          Math.min(this.totalCount - 1, rowIndex + this.cache.blockSize)
+        );
+      }
+      return undefined;
+    }
     return {
       type: 'data',
       rawIndex: rowIndex,
@@ -66,7 +108,6 @@ export class RemoteDataStore implements IDataStore {
 
     if (missingBlocks.length === 0) return Promise.resolve();
 
-    // Eksik blokları sunucudan çek
     return Promise.all(missingBlocks.map((b) => this.fetchBlock(b))).then(() => {});
   }
 
@@ -75,10 +116,9 @@ export class RemoteDataStore implements IDataStore {
     const skip = blockIndex * this.cache.blockSize;
     const take = this.cache.blockSize;
 
-    const payload = {
+    const payload: DataGridQuery = {
       skip,
       take,
-      requireTotalCount: true,
       filter: this.currentFilter,
       sort: this.currentSort,
       search: this.currentSearch,
@@ -87,19 +127,35 @@ export class RemoteDataStore implements IDataStore {
 
     try {
       this.emit('loading');
-      const res = await fetch(this.url, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(payload),
-      });
+      let rows: any[] = [];
+      let total = 0;
+      let summaries: Record<string, number> | undefined;
 
-      if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+      if (this.customLoad) {
+        const res = await this.customLoad(payload);
+        rows = res.data || [];
+        total = res.totalCount ?? rows.length;
+        if (res.summary && typeof res.summary === 'object' && !Array.isArray(res.summary)) {
+          summaries = res.summary as any;
+        }
+      } else if (this.url) {
+        const res = await fetch(this.url, {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify(payload),
+        });
 
-      const json = await res.json();
-      const rows = json.data || [];
-      this.totalCount = json.totalCount ?? rows.length;
-      if (json.summary) {
-        this.summaries = json.summary;
+        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+
+        const json = await res.json();
+        rows = json.data || json.rows || [];
+        total = json.totalCount ?? json.total_count ?? rows.length;
+        summaries = json.summary || json.summaries;
+      }
+
+      this.totalCount = total;
+      if (summaries) {
+        this.summaries = summaries;
       }
 
       this.cache.setBlock(blockIndex, rows);
@@ -107,7 +163,7 @@ export class RemoteDataStore implements IDataStore {
       this.emit('loaded');
     } catch (err: any) {
       this.pendingBlockRequests.delete(blockIndex);
-      if (err.name !== 'AbortError') {
+      if (err?.name !== 'AbortError') {
         this.emit('error', err);
       }
     }
@@ -115,42 +171,42 @@ export class RemoteDataStore implements IDataStore {
 
   public async setFilter(filter: FilterDescriptor | null): Promise<void> {
     this.currentFilter = filter;
-    this.resetAndReload();
-    return Promise.resolve();
+    await this.resetAndReloadAsync();
   }
 
   public async setSearch(keyword: string): Promise<void> {
     this.currentSearch = keyword;
-    this.resetAndReload();
-    return Promise.resolve();
+    await this.resetAndReloadAsync();
   }
 
   public async setSorting(sortRules: SortDescriptor[]): Promise<void> {
     this.currentSort = sortRules;
-    this.resetAndReload();
-    return Promise.resolve();
+    await this.resetAndReloadAsync();
   }
 
   public async setGrouping(groupDescriptors: GroupDescriptor[]): Promise<void> {
     this.currentGroups = groupDescriptors;
-    this.resetAndReload();
-    return Promise.resolve();
+    await this.resetAndReloadAsync();
   }
 
   public async toggleGroup(_groupKey: string): Promise<void> {
-    // Sunucu taraflı lazy gruplama genişletmesi
-    this.resetAndReload();
-    return Promise.resolve();
+    await this.resetAndReloadAsync();
   }
 
   public async setCell(rowKey: any, columnId: string, value: any): Promise<void> {
     try {
-      await fetch(`${this.url}/${rowKey}`, {
-        method: 'PATCH',
-        headers: this.headers,
-        body: JSON.stringify({ [columnId]: value }),
-      });
-      this.resetAndReload();
+      if (this.customUpdate) {
+        await this.customUpdate(rowKey, { [columnId]: value });
+      } else if (this.url) {
+        const [baseUrl, query] = this.url.split('?');
+        const qs = query ? `?${query}` : '';
+        await fetch(`${baseUrl}/${rowKey}${qs}`, {
+          method: 'PATCH',
+          headers: this.headers,
+          body: JSON.stringify({ [columnId]: value }),
+        });
+      }
+      await this.resetAndReloadAsync();
     } catch (err) {
       this.emit('error', err);
     }
@@ -158,27 +214,53 @@ export class RemoteDataStore implements IDataStore {
 
   public async commitBatch(changes: BatchChanges): Promise<void> {
     try {
-      await fetch(`${this.url}/batch`, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(changes),
-      });
-      this.resetAndReload();
+      if (this.customCommit) {
+        await this.customCommit(changes);
+      } else if (this.url) {
+        const [baseUrl, query] = this.url.split('?');
+        const qs = query ? `?${query}` : '';
+        await fetch(`${baseUrl}/batch${qs}`, {
+          method: 'POST',
+          headers: this.headers,
+          body: JSON.stringify(changes),
+        });
+      }
+      await this.resetAndReloadAsync();
     } catch (err) {
       this.emit('error', err);
     }
   }
 
   public async getDistinctValues(columnId: string, search?: string): Promise<DistinctItem[]> {
+    if (this.customLoadDistinct) {
+      return this.customLoadDistinct(columnId, search);
+    }
+    if (!this.url) return [];
     try {
-      const distinctUrl = `${this.url}/distinct?column=${encodeURIComponent(columnId)}&search=${encodeURIComponent(search || '')}`;
+      const sep = this.url.includes('?') ? '&' : '?';
+      const distinctUrl = `${this.url}${sep}action=distinct&column=${encodeURIComponent(
+        columnId
+      )}&search=${encodeURIComponent(search || '')}`;
       const res = await fetch(distinctUrl, {
         method: 'GET',
         headers: this.headers,
       });
       if (!res.ok) return [];
       const json = await res.json();
-      return json.items || [];
+      const items = json.items || json.data || [];
+      return items.map((it: any) => {
+        if (typeof it === 'object' && it !== null && 'value' in it) {
+          return {
+            value: it.value,
+            label: it.label !== undefined ? String(it.label) : String(it.value),
+            count: typeof it.count === 'number' ? it.count : undefined,
+          };
+        }
+        return {
+          value: it,
+          label: String(it),
+        };
+      });
     } catch {
       return [];
     }
@@ -203,13 +285,17 @@ export class RemoteDataStore implements IDataStore {
     this.listeners.get(event)?.forEach((cb) => cb(...args));
   }
 
-  private resetAndReload(): void {
+  private async resetAndReloadAsync(): Promise<void> {
     if (this.currentAbortController) {
       this.currentAbortController.abort();
     }
     this.currentAbortController = new AbortController();
     this.cache.clear();
     this.pendingBlockRequests.clear();
-    this.fetchBlock(0);
+    await this.fetchBlock(0);
+  }
+
+  public resetAndReload(): void {
+    this.resetAndReloadAsync().catch(() => {});
   }
 }
