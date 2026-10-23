@@ -1,6 +1,6 @@
 {
   "name": "sheetgl",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "High-performance WebGL & Canvas Excel DataGrid for React with viewport virtualization, 21 column types, DevExtreme-style batch CRUD & cascading triggers, and zero dependencies. MIT licensed.",
   "license": "MIT",
   "author": "SheetGL Contributors",

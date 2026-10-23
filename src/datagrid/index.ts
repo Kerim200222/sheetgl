@@ -81,3 +81,7 @@ export type { IGridLocale } from './i18n/IGridLocale';
 export type { LocaleInput } from './i18n/LocaleEngine';
 export { enUS } from './i18n/locales/enUS';
 export { trTR } from './i18n/locales/trTR';
+
+export { PdfColumnPlugin } from './columns/types/PdfColumn';
+export { PdfPreviewModalOverlay } from './overlays/PdfPreviewModalOverlay';
+export type { PdfPreviewModalState, PdfPreviewModalOverlayProps } from './overlays/PdfPreviewModalOverlay';

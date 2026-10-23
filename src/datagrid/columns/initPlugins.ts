@@ -20,6 +20,7 @@ import { RatingColumnPlugin } from './types/RatingColumn';
 import { ProgressColumnPlugin } from './types/ProgressColumn';
 import { SparklineColumnPlugin } from './types/SparklineColumn';
 import { ActionColumnPlugin } from './types/ActionColumn';
+import { PdfColumnPlugin } from './types/PdfColumn';
 
 let initialized = false;
 
@@ -47,6 +48,7 @@ export function initDefaultColumnPlugins(): void {
   ColumnTypeRegistry.register(ProgressColumnPlugin);
   ColumnTypeRegistry.register(SparklineColumnPlugin);
   ColumnTypeRegistry.register(ActionColumnPlugin);
+  ColumnTypeRegistry.register(PdfColumnPlugin);
 
   initialized = true;
 }

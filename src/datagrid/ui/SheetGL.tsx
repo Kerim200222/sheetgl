@@ -33,6 +33,7 @@ import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
 import { HeaderFilterPopover } from '../overlays/HeaderFilterPopover';
 import { ContextMenuOverlay, ContextMenuState } from '../overlays/ContextMenuOverlay';
 import { SparklineModalOverlay, SparklineModalState } from '../overlays/SparklineModalOverlay';
+import { PdfPreviewModalOverlay, PdfPreviewModalState } from '../overlays/PdfPreviewModalOverlay';
 import { BatchChangesModal } from '../overlays/BatchChangesModal';
 import { DeleteConfirmProgressModal } from '../overlays/DeleteConfirmProgressModal';
 import { ToolBar } from './ToolBar';
@@ -83,6 +84,8 @@ export interface SheetGLProps {
   /** DevExtreme-style remote operations configuration */
   remoteOperations?: boolean | RemoteOperationsConfig;
   /** Filter change callback */
+  /** Callback when user clicks PDF viewer button in a PDF/file column */
+  onPdfPreviewClick?: (url: string, row: any, column: ColumnDef) => void;
   onFilterChange?: (
     filter: FilterDescriptor | null,
     columnFilters: Record<string, ColumnFilterState>
@@ -160,6 +163,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   selectedRowKeys: userSelectedRowKeys,
   onSelectionChanged,
   onPermissionsChange,
+  onPdfPreviewClick,
   onCellChange,
   onEditingStart,
   onCellValueChanging,
@@ -432,6 +436,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [sparklineModal, setSparklineModal] = useState<SparklineModalState | null>(null);
+  const [pdfModal, setPdfModal] = useState<PdfPreviewModalState | null>(null);
   const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
   const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
     rowKeys: any[];
@@ -573,7 +578,25 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       if (containerRef.current) observer.observe(containerRef.current);
     }
 
+    const handleOpenPdfEvent = (e: Event) => {
+      const custom = e as CustomEvent<{ url: string; title: string; row: any; column: ColumnDef }>;
+      if (custom.detail) {
+        if (onPdfPreviewClick) {
+          onPdfPreviewClick(custom.detail.url, custom.detail.row, custom.detail.column);
+        } else {
+          setPdfModal({
+            url: custom.detail.url,
+            title: custom.detail.title,
+            column: custom.detail.column,
+            row: custom.detail.row,
+          });
+        }
+      }
+    };
+    window.addEventListener('sheetgl-open-pdf', handleOpenPdfEvent);
+
     return () => {
+      window.removeEventListener('sheetgl-open-pdf', handleOpenPdfEvent);
       window.removeEventListener('resize', handleResize);
       observer?.disconnect();
     };
@@ -3484,7 +3507,16 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         )}
 
         {/* 6b. DETAILED SPARKLINE TREND CHART MODAL DIALOG */}
-        {sparklineModal && (
+        {pdfModal && (
+        <PdfPreviewModalOverlay
+          modal={pdfModal}
+          theme={resolvedTheme}
+          locale={currentLocale}
+          onClose={() => setPdfModal(null)}
+        />
+      )}
+
+      {sparklineModal && (
           <SparklineModalOverlay
             modal={sparklineModal}
             theme={resolvedTheme}

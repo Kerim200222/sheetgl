@@ -20,6 +20,8 @@ export type ColumnType =
   | 'time'
   | 'email'
   | 'url'
+  | 'pdf'
+  | 'file'
   | 'phone'
   | 'color'
   | 'rating'
@@ -268,6 +270,12 @@ export interface ColumnDef {
   sparklineColor?: string;
   buttonText?: string;
   onActionClick?: (row: any, rowIndex: number) => void;
+  /** Custom handler when clicking PDF view button in a 'pdf' or 'file' column */
+  onPdfClick?: (url: string, row: any, rowIndex: number) => void;
+  /** Custom handler when clicking Open in New Tab button in a 'pdf' or 'file' column */
+  onPdfOpenNewTabClick?: (url: string, row: any, rowIndex: number) => void;
+  /** Optional URL prefix prepended to relative file/document paths */
+  urlPrefix?: string;
   headerTooltip?: string;
   defaultValue?: any;
   summaryType?: SummaryType;
