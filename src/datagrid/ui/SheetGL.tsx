@@ -1,4 +1,7 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { GridApi } from '../core/GridApi';
+import { useGridSelection } from '../hooks/useGridSelection';
+import { useGridGeometry } from '../hooks/useGridGeometry';
 import {
   ColumnDef,
   ActiveOverlayState,
@@ -113,38 +116,41 @@ function compileColumnFilters(map: Record<string, ColumnFilterState>): FilterDes
   return composite;
 }
 
-export const SheetGL: React.FC<SheetGLProps> = ({
-  dataSource,
-  columns: userColumns,
-  theme: userTheme = 'apple-dark',
-  locale: userLocale,
-  rowHeight = 34,
-  headerHeight = 38,
-  initialSort = [],
-  initialGroups = [],
-  permissions: userPermissions,
-  batchEditMode = true,
-  toolbar: userToolbar,
-  onToolbarConfigChange,
-  summaryRow: userSummaryRow,
-  onSummaryConfigChange,
-  showFormulaBar = true,
-  onPermissionsChange,
-  onCellChange,
-  onEditingStart,
-  onCellValueChanging,
-  onCellValueChanged,
-  onRowInserting,
-  onRowInserted,
-  onRowUpdating,
-  onRowUpdated,
-  onRowRemoving,
-  onRowRemoved,
-  onSaving,
-  onSaved,
-  style,
-  className,
-}) => {
+export const SheetGL = forwardRef<GridApi, SheetGLProps>((
+  {
+    dataSource,
+    columns: userColumns,
+    theme: userTheme = 'apple-dark',
+    locale: userLocale,
+    rowHeight = 34,
+    headerHeight = 38,
+    initialSort = [],
+    initialGroups = [],
+    permissions: userPermissions,
+    batchEditMode = true,
+    toolbar: userToolbar,
+    onToolbarConfigChange,
+    summaryRow: userSummaryRow,
+    onSummaryConfigChange,
+    showFormulaBar = true,
+    onPermissionsChange,
+    onCellChange,
+    onEditingStart,
+    onCellValueChanging,
+    onCellValueChanged,
+    onRowInserting,
+    onRowInserted,
+    onRowUpdating,
+    onRowUpdated,
+    onRowRemoving,
+    onRowRemoved,
+    onSaving,
+    onSaved,
+    style,
+    className,
+  },
+  ref
+) => {
   // 1. Initialize Default Column Plugins synchronously on first render
   useMemo(() => {
     initDefaultColumnPlugins();
@@ -332,31 +338,47 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     [onSummaryConfigChange]
   );
 
-  // 4. Core Engines
-  const [columns, setColumns] = useState<ColumnDef[]>(userColumns);
-  useEffect(() => {
-    setColumns(userColumns);
-  }, [userColumns]);
+  // 4. Geometry & Layout Hook
+  const {
+    containerRef,
+    gridSurfaceRef,
+    scrollContainerRef,
+    geometryRef,
+    columns,
+    setColumns,
+    updateColumnDef: handleUpdateColumnDef,
+    setColumnWidth: handleSetColumnWidth,
+    getColumnWidth: handleGetColumnWidth,
+    resizingCol,
+    setResizingCol,
+    scrollPosRef,
+    scrollIndicator,
+    setScrollIndicator,
+    handleScroll,
+    ensureCellVisible,
+    scrollTo,
+    scrollToTop,
+    scrollToBottom,
+    getViewportCoords,
+    checkEdgeAutoScroll,
+    getTotalWidth,
+    getTotalHeight,
+  } = useGridGeometry({
+    userColumns,
+    rowHeight,
+    headerHeight,
+    rowCount: store.getRowCount(),
+    onRequestRender: () => requestRenderRef.current(),
+    onActiveOverlayClear: () => setActiveOverlay(null),
+  });
 
-  const geometryRef = useRef<GeometryEngine>(
-    new GeometryEngine(userColumns, rowHeight, headerHeight)
-  );
-  const selectionRef = useRef<SelectionModel>(new SelectionModel());
   const historyRef = useRef<HistoryManager>(new HistoryManager(100));
-
-  useEffect(() => {
-    geometryRef.current.rowHeight = rowHeight;
-    geometryRef.current.headerHeight = headerHeight;
-    geometryRef.current.setColumns(columns);
-  }, [columns, rowHeight, headerHeight]);
 
   // 5. UI State Management
   const [sortRules, setSortRules] = useState<SortDescriptor[]>(initialSort);
   const [groups, setGroups] = useState<GroupDescriptor[]>(initialGroups);
   const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterState>>({});
   const [searchKeyword, setSearchKeyword] = useState<string>('');
-  const [selectedCellUI, setSelectedCellUI] = useState<{ row: number; col: number }>({ row: 0, col: 0 });
-  const [selectionVersion, setSelectionVersion] = useState<number>(0);
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlayState | null>(null);
   const [editorValidationError, setEditorValidationError] = useState<string | null>(null);
   const [isEditorValidating, setIsEditorValidating] = useState<boolean>(false);
@@ -372,14 +394,6 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   const hoveredCellRef = useRef<{ row: number; col: number } | null>(null);
   const hoveredFilterColRef = useRef<number | null>(null);
   const [cursorStyle, setCursorStyle] = useState<string>('cell');
-  const [resizingCol, setResizingCol] = useState<{
-    colIndex: number;
-     colId: string;
-    startX: number;
-    initialWidth: number;
-  } | null>(null);
-  const [isDraggingSelection, setIsDraggingSelection] = useState<boolean>(false);
-  const [isDraggingRowNumbers, setIsDraggingRowNumbers] = useState<boolean>(false);
   const [fillDragState, setFillDragState] = useState<{
     mode: 'corner' | 'right-duplicate';
     sourceRange: { minRow: number; maxRow: number; minCol: number; maxCol: number };
@@ -389,22 +403,11 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   // Async Backend Cascading Row Loading Keys
   const loadingRowKeysRef = useRef<Set<any>>(new Set());
 
-  // Right-side Scroll Indicator State
-  const scrollPosRef = useRef<{ left: number; top: number }>({ left: 0, top: 0 });
-  const [scrollIndicator, setScrollIndicator] = useState<{ visible: boolean; row: number }>({
-    visible: false,
-    row: 1,
-  });
-  const scrollHideTimerRef = useRef<number | null>(null);
-
   // Internal clipboard fallback for context menu Copy/Paste
   const internalClipboardRef = useRef<string>('');
 
-  // DOM Element Refs
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const gridSurfaceRef = useRef<HTMLDivElement | null>(null);
+  // DOM Element Refs (canvas remains local to SheetGL)
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   const showToast = useCallback((text: string, type: 'info' | 'warning' | 'success' = 'info') => {
     setToastMessage({ text, type });
@@ -432,6 +435,32 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       store.setGrouping(initialGroups);
     }
   }, []);
+
+  const requestRenderRef = useRef<() => void>(() => {});
+
+  // 5b. Selection Hook
+  const {
+    selectionRef,
+    selectionVersion,
+    setSelectionVersion,
+    selectedCellUI,
+    setSelectedCellUI,
+    isDraggingSelection,
+    setIsDraggingSelection,
+    isDraggingRowNumbers,
+    setIsDraggingRowNumbers,
+    selectCell,
+    selectRange,
+    selectAll,
+    selectFullRow,
+    moveSelection: hookMoveSelection,
+    clearSelection,
+    stopDragging,
+    getActiveCell,
+    getSelectedRange,
+  } = useGridSelection({
+    onRequestRender: () => requestRenderRef.current(),
+  });
 
   const activeFilterColumnIds = useMemo(
     () => new Set(Object.keys(columnFilters)),
@@ -473,27 +502,47 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     permissions,
   ]);
 
+  requestRenderRef.current = requestRender;
+
+  // 6b. Expose Imperative GridApi
+  useImperativeHandle(
+    ref,
+    (): GridApi => ({
+      requestRender,
+      selectCell,
+      selectRange,
+      clearSelection,
+      selectAll: () => selectAll(store.getRowCount(), geometryRef.current.columns.length),
+      getActiveCell,
+      getSelectedRange,
+      ensureCellVisible,
+      scrollTo,
+      setColumnWidth: handleSetColumnWidth,
+      getColumnWidth: handleGetColumnWidth,
+      getTotalWidth,
+      getTotalHeight: () => getTotalHeight(store.getRowCount()),
+    }),
+    [
+      requestRender,
+      selectCell,
+      selectRange,
+      clearSelection,
+      selectAll,
+      store,
+      getActiveCell,
+      getSelectedRange,
+      ensureCellVisible,
+      scrollTo,
+      handleSetColumnWidth,
+      handleGetColumnWidth,
+      getTotalWidth,
+      getTotalHeight,
+    ]
+  );
+
   useEffect(() => {
     requestRender();
   }, [requestRender, resolvedTheme, currentLocale, storeVersion, columns, selectionVersion]);
-
-  // 6b. Resize Observer
-  useEffect(() => {
-    const handleResize = () => requestRender();
-    window.addEventListener('resize', handleResize);
-
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      observer = new ResizeObserver(() => requestRender());
-      if (gridSurfaceRef.current) observer.observe(gridSurfaceRef.current);
-      if (containerRef.current) observer.observe(containerRef.current);
-    }
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      observer?.disconnect();
-    };
-  }, [requestRender]);
 
   // ============================================================================
   // PERMISSION & EDITABILITY CHECKER
@@ -1388,43 +1437,11 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     requestRender();
   };
 
-  const handleUpdateColumnDef = (colId: string, patch: Partial<ColumnDef>) => {
-    setColumns((prev) =>
-      prev.map((c) => (c.id === colId ? { ...c, ...patch } : c))
-    );
-  };
-
   const handleChangeSummaryType = (colId: string, summaryType: SummaryType) => {
     store.setSummaryType?.(colId, summaryType);
     setStoreVersion((v) => v + 1);
     requestRender();
   };
-
-  // ============================================================================
-  // COLUMN RESIZING EFFECT
-  // ============================================================================
-  useEffect(() => {
-    if (!resizingCol) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const deltaX = e.clientX - resizingCol.startX;
-      const newWidth = Math.max(48, resizingCol.initialWidth + deltaX);
-      setColumns((prev) =>
-        prev.map((c) => (c.id === resizingCol.colId ? { ...c, width: newWidth } : c))
-      );
-    };
-
-    const handleMouseUp = () => {
-      setResizingCol(null);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [resizingCol]);
 
   // ============================================================================
   // DRAG SELECTION & FILL HANDLE DRAG EFFECT (WITH AUTO-SCROLL AT EDGES)
@@ -1442,17 +1459,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       const y = e.clientY - rect.top;
 
       // Auto-scroll when dragging near viewport edges
-      const edgeThreshold = 36;
-      if (y > rect.height - edgeThreshold) {
-        sc.scrollTop += 18;
-      } else if (y < geometryRef.current.headerHeight + edgeThreshold && y > geometryRef.current.headerHeight) {
-        sc.scrollTop = Math.max(0, sc.scrollTop - 18);
-      }
-      if (x > rect.width - edgeThreshold) {
-        sc.scrollLeft += 24;
-      } else if (x < geometryRef.current.totalFrozenWidth + edgeThreshold && x > geometryRef.current.totalFrozenWidth) {
-        sc.scrollLeft = Math.max(0, sc.scrollLeft - 24);
-      }
+      checkEdgeAutoScroll(x, y, rect);
 
       const rowCount = store.getRowCount();
       if (rowCount === 0) return;
@@ -1611,55 +1618,16 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   // ============================================================================
   // NAVIGATION & AUTO-SCROLL INTO VIEW
   // ============================================================================
-  const ensureCellVisible = (row: number, col: number) => {
-    const geom = geometryRef.current;
-    const sc = scrollContainerRef.current;
-    if (!sc) return;
-
-    const cellTop = geom.headerHeight + row * geom.rowHeight;
-    const cellBottom = cellTop + geom.rowHeight;
-
-    if (cellTop < sc.scrollTop + geom.headerHeight) {
-      sc.scrollTop = cellTop - geom.headerHeight;
-    } else if (cellBottom > sc.scrollTop + sc.clientHeight) {
-      sc.scrollTop = cellBottom - sc.clientHeight;
-    }
-
-    const colRect = geom.getColumnScreenRect(col, sc.scrollLeft);
-    if (!colRect.isFrozen) {
-      if (colRect.x < geom.totalFrozenWidth) {
-        sc.scrollLeft -= geom.totalFrozenWidth - colRect.x;
-      } else if (colRect.x + colRect.width > sc.clientWidth) {
-        sc.scrollLeft += colRect.x + colRect.width - sc.clientWidth;
-      }
-    }
-  };
-
   const moveSelection = (dRow: number, dCol: number, isRangeSelect: boolean = false) => {
-    const geom = geometryRef.current;
-    const rowCount = store.getRowCount();
-    if (rowCount === 0 || geom.columns.length === 0) return;
-
-    const cur = isRangeSelect && selectionRef.current.selectionRange
-      ? {
-          row: selectionRef.current.selectionRange.endRow,
-          col: selectionRef.current.selectionRange.endCol,
-        }
-      : selectionRef.current.activeCell;
-
-    const nextRow = Math.max(0, Math.min(rowCount - 1, cur.row + dRow));
-    const nextCol = Math.max(0, Math.min(geom.columns.length - 1, cur.col + dCol));
-
-    if (isRangeSelect) {
-      selectionRef.current.setRangeEnd(nextRow, nextCol);
-    } else {
-      selectionRef.current.setActiveCell(nextRow, nextCol);
-      setSelectedCellUI({ row: nextRow, col: nextCol });
-    }
-
-    setSelectionVersion((v) => v + 1);
-    ensureCellVisible(nextRow, nextCol);
-    requestRender();
+    hookMoveSelection(
+      dRow,
+      dCol,
+      isRangeSelect,
+      store.getRowCount(),
+      geometryRef.current.columns.length
+    );
+    const active = getActiveCell();
+    ensureCellVisible(active.row, active.col);
   };
 
   // ============================================================================
@@ -1707,21 +1675,6 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   // ============================================================================
   // VIEWPORT MOUSE EVENTS (FIXED COORDINATE SYSTEM)
   // ============================================================================
-  const getViewportCoords = (e: React.MouseEvent): { x: number; y: number; onScrollbar: boolean } => {
-    const surface = gridSurfaceRef.current;
-    const sc = scrollContainerRef.current;
-    if (!surface) return { x: 0, y: 0, onScrollbar: false };
-
-    const rect = surface.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const onScrollbar = Boolean(
-      sc && (x >= sc.clientWidth || y >= sc.clientHeight)
-    );
-    return { x, y, onScrollbar };
-  };
-
   const handleSurfaceMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (resizingCol || isDraggingSelection || isDraggingRowNumbers || fillDragState) return;
     const { x, y, onScrollbar } = getViewportCoords(e);
@@ -2697,27 +2650,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         {/* Virtual Scroll Container */}
         <div
           ref={scrollContainerRef}
-          onScroll={(e) => {
-            const target = e.currentTarget;
-            scrollPosRef.current = {
-              left: target.scrollLeft,
-              top: target.scrollTop,
-            };
-            const topRow = Math.max(
-              1,
-              Math.floor(target.scrollTop / geometryRef.current.rowHeight) + 1
-            );
-            setScrollIndicator({ visible: true, row: topRow });
-            if (scrollHideTimerRef.current) {
-              window.clearTimeout(scrollHideTimerRef.current);
-            }
-            scrollHideTimerRef.current = window.setTimeout(() => {
-              setScrollIndicator((prev) => ({ ...prev, visible: false }));
-            }, 900);
-
-            if (activeOverlay) setActiveOverlay(null);
-            requestRender();
-          }}
+          onScroll={handleScroll}
           style={{
             position: 'absolute',
             inset: 0,
@@ -2728,13 +2661,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
           {/* Virtual Sizing Spacer (Adds 18px right buffer so vertical scrollbar never covers rightmost header filter icon) */}
           <div
             style={{
-              width:
-                geometryRef.current.totalFrozenWidth +
-                geometryRef.current.totalScrollableWidth +
-                18,
-              height:
-                geometryRef.current.headerHeight +
-                store.getRowCount() * geometryRef.current.rowHeight,
+              width: getTotalWidth(),
+              height: getTotalHeight(store.getRowCount()),
               pointerEvents: 'none',
             }}
           />
@@ -2792,11 +2720,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
             <button
               type="button"
               title="Scroll to Top"
-              onClick={() => {
-                if (scrollContainerRef.current) {
-                  scrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-              }}
+              onClick={scrollToTop}
               style={{
                 width: 26,
                 height: 26,
@@ -2816,14 +2740,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
             <button
               type="button"
               title="Scroll to Bottom"
-              onClick={() => {
-                if (scrollContainerRef.current) {
-                  scrollContainerRef.current.scrollTo({
-                    top: scrollContainerRef.current.scrollHeight,
-                    behavior: 'smooth',
-                  });
-                }
-              }}
+              onClick={scrollToBottom}
               style={{
                 width: 26,
                 height: 26,
@@ -3093,4 +3010,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       />
     </div>
   );
-};
+});
+
+SheetGL.displayName = 'SheetGL';
+
+

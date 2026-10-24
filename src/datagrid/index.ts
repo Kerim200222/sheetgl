@@ -1,5 +1,10 @@
 export { SheetGL } from './ui/SheetGL';
 export type { SheetGLProps } from './ui/SheetGL';
+export type { GridApi, NormalizedCellRange } from './core/GridApi';
+export { useGridSelection } from './hooks/useGridSelection';
+export type { UseGridSelectionOptions, UseGridSelectionReturn } from './hooks/useGridSelection';
+export { useGridGeometry } from './hooks/useGridGeometry';
+export type { UseGridGeometryOptions, UseGridGeometryReturn, ColumnResizeState } from './hooks/useGridGeometry';
 export { SheetGLLogo } from './ui/SheetGLLogo';
 export type { SheetGLLogoProps } from './ui/SheetGLLogo';
 export { MaterialIcon, ensureMaterialSymbolsLoaded } from './ui/MaterialIcon';
