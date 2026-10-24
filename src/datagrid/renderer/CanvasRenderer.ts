@@ -103,6 +103,8 @@ export class CanvasRenderer {
 
       if (rowCount > 0 && endRow >= startRow) {
         store.ensureRange(startRow, endRow);
+      } else if (rowCount === 0 && store.isRemote()) {
+        store.ensureRange(0, Math.max(0, Math.ceil((height - headerH) / rowH)));
       }
 
       // 3. Viewport Scrollable Column Bounds

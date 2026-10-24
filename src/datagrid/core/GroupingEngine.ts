@@ -1,4 +1,5 @@
 import { GroupDescriptor, SummaryType, VirtualRow } from '../types/group';
+import { FilterEngine } from './FilterEngine';
 
 export class GroupingEngine {
   private static formatGroupKeyVal(raw: any): string {
@@ -121,8 +122,9 @@ export class GroupingEngine {
           let min = Infinity;
           let max = -Infinity;
           for (const bi of bucketItems) {
-            const num = Number(bi[sf]);
-            if (!isNaN(num)) {
+            const raw = bi[sf];
+            const num = typeof raw === 'number' ? raw : FilterEngine.parseNumeric(raw);
+            if (raw !== null && raw !== undefined && raw !== '' && !isNaN(num)) {
               sum += num;
               count++;
               if (num < min) min = num;

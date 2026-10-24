@@ -24,6 +24,8 @@ export interface ColumnFilterState {
   operator?: FilterOperation;
   value1?: any;
   value2?: any;
+  /** Pre-compiled semantic AST filter (e.g. Year > Month > Day range/ISO expressions for local & remote execution) */
+  semanticFilter?: FilterDescriptor;
 }
 
 export interface SortDescriptor {

@@ -9,7 +9,7 @@ SheetGL is natively designed to operate over datasets with millions of rows by d
 When virtual scrolling occurs or when the user changes filters, `RemoteDataStore` constructs HTTP GET requests with URL-encoded query parameters:
 
 ```
-GET /api/v1/customers?skip=0&take=100&sort=[{"selector":"balance","desc":true}]&filter=["status","=","active"]
+GET /api/v1/customers?skip=0&take=100&sort=[{"selector":"balance","desc":true}]&filter=[["createdAt","between",["2026-06-01","2026-06-30"]],"and",["progress","<",35]]
 ```
 
 ### Request Query Parameters
@@ -35,7 +35,8 @@ Your API endpoint should return a JSON response formatted as follows:
     { "id": 101, "name": "Acme Global", "balance": 45000.0, "status": "active" },
     { "id": 102, "name": "Nexus Cloud", "balance": 72500.0, "status": "active" }
   ],
-  "totalCount": 24500,
+  "totalCount": 289,
+  "unfilteredTotalCount": 10000,
   "summary": {
     "balance": 1102500.0
   }
@@ -44,7 +45,51 @@ Your API endpoint should return a JSON response formatted as follows:
 
 ---
 
-## 3. Client-Side Setup
+## 3. Context-Aware Distinct Values & Semantic Date Tree Endpoint (`/distinct`)
+
+When a user opens the header filter menu on any column, `RemoteDataStore.getDistinctValues(columnId, search, baseFilter)` queries your `/distinct` endpoint and forwards the composite `filter` of all **other** active columns (`baseFilter`) so that preview row counts (`Uygula (289)`) always match the exact intersection of active filters:
+
+```
+GET /api/v1/customers/distinct?field=progress&filter=["createdAt","between",["2026-06-01","2026-06-30"]]
+```
+
+### 3.1. Flat Distinct Values Response
+```json
+[
+  { "value": 14, "label": "%14", "count": 48 },
+  { "value": 28, "label": "%28", "count": 52 }
+]
+```
+
+### 3.2. Semantic Date Hierarchy (`Yıl > Ay > Gün`) Response & AST Compilation
+For `date` and `datetime` columns, the `/distinct` endpoint may return either ISO date items (`{ "value": "2026-06-15", "count": 12 }`) or a nested `Year > Month > Day` tree:
+
+```json
+[
+  {
+    "year": 2026,
+    "count": 833,
+    "months": [
+      {
+        "month": 6,
+        "count": 289,
+        "days": [
+          { "day": 15, "isoDate": "2026-06-15", "count": 28 }
+        ]
+      }
+    ]
+  }
+]
+```
+
+When the user selects full years, full months, or specific days in the Semantic Date Tree (`Yıl > Ay > Gün`), SheetGL compiles the selection into a compact AST `semanticFilter` expression instead of sending thousands of raw timestamp strings:
+- **Full Year Checked (`2026`):** `["createdAt", "between", ["2026-01-01", "2026-12-31"]]`
+- **Full Month Checked (`Haziran 2026`):** `["createdAt", "between", ["2026-06-01", "2026-06-30"]]`
+- **Specific Days Checked:** `["createdAt", "in", ["2026-06-15", "2026-06-16"]]`
+
+---
+
+## 4. Client-Side Setup
 
 ```tsx
 import React, { useMemo } from 'react';
@@ -66,6 +111,7 @@ export function RemoteCustomersGrid() {
   const columns: ColumnDef[] = useMemo(() => [
     { id: 'id', title: 'ID', type: 'number', width: 80, sortable: true },
     { id: 'name', title: 'Customer Name', type: 'text', width: 250, sortable: true, filterable: true },
+    { id: 'createdAt', title: 'Transaction Date', type: 'datetime', width: 170, sortable: true, filterable: true },
     { id: 'balance', title: 'Balance', type: 'currency', width: 140, sortable: true },
   ], []);
 
@@ -75,9 +121,9 @@ export function RemoteCustomersGrid() {
 
 ---
 
-## 4. Backend Implementation Examples
+## 5. Backend Implementation Examples
 
-### 4.1. Node.js (Express + TypeScript + SQL)
+### 5.1. Node.js (Express + TypeScript + SQL)
 
 ```typescript
 import express, { Request, Response } from 'express';
@@ -100,6 +146,9 @@ app.get('/api/v1/customers', async (req: Request, res: Response) => {
     if (op === '=') {
       query = query.where(field, value);
       countQuery = countQuery.where(field, value);
+    } else if (op === 'between' && Array.isArray(value)) {
+      query = query.whereBetween(field, [value[0], value[1]]);
+      countQuery = countQuery.whereBetween(field, [value[0], value[1]]);
     } else if (op === 'contains') {
       query = query.whereILike(field, `%${value}%`);
       countQuery = countQuery.whereILike(field, `%${value}%`);
@@ -128,7 +177,7 @@ app.get('/api/v1/customers', async (req: Request, res: Response) => {
 });
 ```
 
-### 4.2. ASP.NET Core (.NET 8/9 with DataSourceLoader)
+### 5.2. ASP.NET Core (.NET 8/9 with DataSourceLoader)
 
 `RemoteDataStore` seamlessly integrates with ASP.NET Core data loaders:
 
@@ -142,7 +191,7 @@ public async Task<IActionResult> Get(DataSourceLoadOptions loadOptions)
 }
 ```
 
-### 4.3. Python (FastAPI + SQLAlchemy)
+### 5.3. Python (FastAPI + SQLAlchemy)
 
 ```python
 import json

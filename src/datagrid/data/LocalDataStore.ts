@@ -88,6 +88,14 @@ export class LocalDataStore implements IDataStore {
     return this.virtualRows.length;
   }
 
+  public getFilteredRowCount(): number {
+    return this.processedData.length;
+  }
+
+  public getTotalDatasetRowCount(): number {
+    return this.rawData.length;
+  }
+
   public getViewRow(rowIndex: number): VirtualRow | undefined {
     return this.virtualRows[rowIndex];
   }
@@ -226,7 +234,7 @@ export class LocalDataStore implements IDataStore {
       }
       item[columnId] = Array.isArray(value) ? [...value] : value;
       delete item.__searchIndex;
-      this.distinctCache.delete(columnId);
+      this.distinctCache.clear();
       this.recompute();
     }
     return Promise.resolve();
@@ -251,12 +259,12 @@ export class LocalDataStore implements IDataStore {
         }
         item[u.columnId] = u.value;
         delete item.__searchIndex;
-        this.distinctCache.delete(u.columnId);
         changed = true;
       }
     }
 
     if (changed) {
+      this.distinctCache.clear();
       this.recompute();
     }
     return Promise.resolve();
@@ -272,9 +280,9 @@ export class LocalDataStore implements IDataStore {
           this.markCellDirty(rowKey, colId, val);
         }
         item[colId] = val;
-        this.distinctCache.delete(colId);
       }
       delete item.__searchIndex;
+      this.distinctCache.clear();
       this.recompute();
     }
     return Promise.resolve();
@@ -325,6 +333,7 @@ export class LocalDataStore implements IDataStore {
       this.insertedKeys.add(newKey);
     }
 
+    this.distinctCache.clear();
     this.recompute();
     return Promise.resolve(newRow);
   }
@@ -364,6 +373,7 @@ export class LocalDataStore implements IDataStore {
       this.insertedKeys.add(newKey);
     }
 
+    this.distinctCache.clear();
     this.recompute();
     return Promise.resolve(cloned);
   }
@@ -387,6 +397,7 @@ export class LocalDataStore implements IDataStore {
       this.rawData[i].__rawIndex = i;
     }
 
+    this.distinctCache.clear();
     this.recompute();
     return Promise.resolve();
   }
@@ -456,6 +467,7 @@ export class LocalDataStore implements IDataStore {
       this.rawData[i].__rawIndex = i;
     }
 
+    this.distinctCache.clear();
     this.recompute();
     return Promise.resolve();
   }
@@ -661,19 +673,41 @@ export class LocalDataStore implements IDataStore {
     this.dirtyCells.clear();
     this.insertedKeys.clear();
     this.deletedRows.clear();
+    this.distinctCache.clear();
     this.recompute();
     return Promise.resolve();
   }
 
-  public async getDistinctValues(columnId: string, search?: string): Promise<DistinctItem[]> {
-    let baseItems = this.distinctCache.get(columnId);
+  public async getDistinctValues(
+    columnId: string,
+    search?: string,
+    baseFilter?: FilterDescriptor | null
+  ): Promise<DistinctItem[]> {
+    const hasBaseFilter =
+      baseFilter !== undefined &&
+      baseFilter !== null &&
+      Array.isArray(baseFilter) &&
+      baseFilter.length > 0;
+    const filterKey = hasBaseFilter ? JSON.stringify(baseFilter) : '__NO_FILTER__';
+    const cleanGlobalSearch = this.currentSearch ? this.currentSearch.toLowerCase().trim() : '';
+    const cacheKey = `${columnId}::f=${filterKey}::s=${cleanGlobalSearch}`;
+
+    let baseItems = this.distinctCache.get(cacheKey);
 
     if (!baseItems) {
+      let sourceRows = this.rawData;
+      if (hasBaseFilter) {
+        sourceRows = sourceRows.filter((row) => FilterEngine.evaluateRow(row, baseFilter!));
+      }
+      if (cleanGlobalSearch) {
+        sourceRows = sourceRows.filter((row) => FilterEngine.matchSearch(row, cleanGlobalSearch));
+      }
+
       const counts = new Map<any, number>();
       let blankCount = 0;
 
-      for (let i = 0; i < this.rawData.length; i++) {
-        const val = this.rawData[i][columnId];
+      for (let i = 0; i < sourceRows.length; i++) {
+        const val = sourceRows[i][columnId];
         if (
           val === undefined ||
           val === null ||
@@ -714,7 +748,7 @@ export class LocalDataStore implements IDataStore {
         });
       }
 
-      this.distinctCache.set(columnId, baseItems);
+      this.distinctCache.set(cacheKey, baseItems);
     }
 
     if (search) {
@@ -767,7 +801,7 @@ export class LocalDataStore implements IDataStore {
 
       for (let i = 0; i < this.processedData.length; i++) {
         const raw = this.processedData[i][colId];
-        const num = Number(raw);
+        const num = typeof raw === 'number' ? raw : FilterEngine.parseNumeric(raw);
         if (raw !== null && raw !== undefined && raw !== '' && !isNaN(num)) {
           sum += num;
           count++;

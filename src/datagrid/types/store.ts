@@ -49,6 +49,10 @@ export interface BatchChanges {
 
 export interface IReadableStore {
   getRowCount(): number;
+  /** Returns matching data record count after active filters/search (independent of collapsed group rows) */
+  getFilteredRowCount?(): number;
+  /** Returns total unfiltered dataset record count */
+  getTotalDatasetRowCount?(): number;
   getViewRow(rowIndex: number): VirtualRow | undefined;
   ensureRange(startRow: number, endRow: number): Promise<void>;
   on(event: 'loading' | 'loaded' | 'error', callback: (...args: any[]) => void): void;
@@ -58,7 +62,11 @@ export interface IReadableStore {
 export interface IFilterableStore {
   setFilter(filter: FilterDescriptor | null): Promise<void>;
   setSearch(keyword: string): Promise<void>;
-  getDistinctValues(columnId: string, search?: string): Promise<DistinctItem[]>;
+  getDistinctValues(
+    columnId: string,
+    search?: string,
+    baseFilter?: FilterDescriptor | null
+  ): Promise<DistinctItem[]>;
 }
 
 export interface ISortableStore {

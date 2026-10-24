@@ -19,6 +19,9 @@ export interface ParsedDateInfo {
 interface CompiledSetCache {
   rawSet: Set<any>;
   lowerSet: Set<string>;
+  isoDateSet: Set<string>;
+  isoMonthSet: Set<string>;
+  isoYearSet: Set<number>;
   hasBlank: boolean;
 }
 
@@ -72,6 +75,9 @@ export class FilterEngine {
     if (!cached) {
       const rawSet = new Set<any>();
       const lowerSet = new Set<string>();
+      const isoDateSet = new Set<string>();
+      const isoMonthSet = new Set<string>();
+      const isoYearSet = new Set<number>();
       let hasBlank = false;
       for (let i = 0; i < targetVal.length; i++) {
         const t = targetVal[i];
@@ -79,17 +85,56 @@ export class FilterEngine {
           hasBlank = true;
         } else {
           rawSet.add(t);
-          if (typeof t === 'string') {
-            lowerSet.add(t.toLowerCase());
+          const s = typeof t === 'string' ? t.trim() : String(t).trim();
+          lowerSet.add(s.toLowerCase());
+
+          if (/^\d{4}$/.test(s)) {
+            const yr = parseInt(s, 10);
+            if (yr >= 1000 && yr <= 9999) {
+              isoYearSet.add(yr);
+            }
+          } else if (/^\d{4}-\d{1,2}$/.test(s)) {
+            const [yStr, mStr] = s.split('-');
+            const yr = parseInt(yStr, 10);
+            const mo = parseInt(mStr, 10);
+            if (yr >= 1000 && yr <= 9999 && mo >= 1 && mo <= 12) {
+              isoMonthSet.add(`${yr}-${String(mo).padStart(2, '0')}`);
+            }
           } else {
-            lowerSet.add(String(t).toLowerCase());
+            const pd = this.parseDateParts(t);
+            if (pd && !pd.hasTime) {
+              isoDateSet.add(pd.isoDate);
+            }
           }
         }
       }
-      cached = { rawSet, lowerSet, hasBlank };
+      cached = { rawSet, lowerSet, isoDateSet, isoMonthSet, isoYearSet, hasBlank };
       this.inSetCache.set(targetVal, cached);
     }
     return cached;
+  }
+
+  private static matchesCompiledDateSet(rawVal: any, compiled: CompiledSetCache): boolean {
+    if (
+      compiled.isoDateSet.size === 0 &&
+      compiled.isoMonthSet.size === 0 &&
+      compiled.isoYearSet.size === 0
+    ) {
+      return false;
+    }
+    const rd = this.parseDateParts(rawVal);
+    if (!rd) return false;
+    if (compiled.isoDateSet.has(rd.isoDate)) return true;
+    if (
+      compiled.isoMonthSet.size > 0 &&
+      compiled.isoMonthSet.has(`${rd.year}-${String(rd.month).padStart(2, '0')}`)
+    ) {
+      return true;
+    }
+    if (compiled.isoYearSet.size > 0 && compiled.isoYearSet.has(rd.year)) {
+      return true;
+    }
+    return false;
   }
 
   public static evaluateRow(row: Record<string, any>, filter: FilterDescriptor | null): boolean {
@@ -232,10 +277,17 @@ export class FilterEngine {
     if (val === null || val === undefined || val === '' || typeof val === 'boolean') return NaN;
     const str = String(val).trim();
     if (!str) return NaN;
-    // Reject strings containing alphabetic characters (e.g. "ACC-100001", "ISO-27001")
-    if (/[a-zA-ZğüşöçıİĞÜŞÖÇ]/.test(str)) return NaN;
 
-    const raw = str.replace(/[^0-9.,+-]/g, '').trim();
+    // Strip standalone ISO currency codes (TL, TRY, USD, EUR, GBP, JPY, CHF, CAD, AUD) while preserving identifier checks like "ACC-100001"
+    const withoutCurrencyCode = str
+      .replace(/(?:^|\s)(TL|TRY|USD|EUR|GBP|JPY|CHF|CAD|AUD)(?=$|\s)/gi, '')
+      .trim();
+
+    // Reject strings containing remaining alphabetic characters (e.g. "ACC-100001", "ISO-27001")
+    if (/[a-zA-ZğüşöçıİĞÜŞÖÇ]/.test(withoutCurrencyCode)) return NaN;
+
+    const isPercentStr = str.includes('%');
+    const raw = withoutCurrencyCode.replace(/[^0-9.,+-]/g, '').trim();
     if (!raw || !/\d/.test(raw)) return NaN;
 
     const hasDot = raw.includes('.');
@@ -252,23 +304,24 @@ export class FilterEngine {
     }
 
     if (hasComma) {
-      // Single or multiple 3-digit thousands grouping: 1,000 or 130,000 or 40,000,000
-      if (/^[+-]?[1-9]\d{0,2}(,\d{3})+$/.test(raw)) {
+      // Multiple commas or US thousands grouping without decimals (when not a percent string)
+      if (!isPercentStr && /^[+-]?[1-9]\d{0,2}(,\d{3})+$/.test(raw) && (raw.indexOf(',') !== raw.lastIndexOf(',') || raw.endsWith(',000'))) {
         return parseFloat(raw.replace(/,/g, ''));
       }
       if (raw.indexOf(',') !== raw.lastIndexOf(',')) {
         return parseFloat(raw.replace(/,/g, ''));
       }
-      // Decimal comma: 15000,47 or 0,500 -> 15000.47 / 0.5
+      // Decimal comma: 15000,47 or +%14,2 or 0,500 -> 15000.47 / 14.2 / 0.5
       return parseFloat(raw.replace(',', '.'));
     }
 
     if (hasDot) {
-      // TR/EU thousands separator without decimals: 1.000 or 15.000 or 130.000 or 1.250.000
-      if (/^[+-]?[1-9]\d{0,2}(\.\d{3})+$/.test(raw)) {
+      // Multiple dots are always thousands separators: 1.250.000 -> 1250000
+      if (raw.indexOf('.') !== raw.lastIndexOf('.')) {
         return parseFloat(raw.replace(/\./g, ''));
       }
-      if (raw.indexOf('.') !== raw.lastIndexOf('.')) {
+      // Single dot with exact .000 suffix (and not a percentage string like "+%14.250") -> TR integer thousands separator (e.g. "15.000")
+      if (!isPercentStr && /^[+-]?[1-9]\d{0,2}\.000$/.test(raw)) {
         return parseFloat(raw.replace(/\./g, ''));
       }
       return parseFloat(raw);
@@ -326,7 +379,8 @@ export class FilterEngine {
         return false;
       }
       if (compiled.rawSet.has(rawVal)) return true;
-      return compiled.lowerSet.has(this.stringifyValue(rawVal).toLowerCase());
+      if (compiled.lowerSet.has(this.stringifyValue(rawVal).toLowerCase())) return true;
+      return this.matchesCompiledDateSet(rawVal, compiled);
     }
 
     if (op === 'notin') {
@@ -343,7 +397,8 @@ export class FilterEngine {
         return true;
       }
       if (compiled.rawSet.has(rawVal)) return false;
-      return !compiled.lowerSet.has(this.stringifyValue(rawVal).toLowerCase());
+      if (compiled.lowerSet.has(this.stringifyValue(rawVal).toLowerCase())) return false;
+      return !this.matchesCompiledDateSet(rawVal, compiled);
     }
 
     if (op === '=' && (targetVal === null || targetVal === undefined || targetVal === '' || targetVal === BLANK_FILTER_TOKEN)) {
@@ -370,8 +425,8 @@ export class FilterEngine {
           const dmy = `${String(rawDate.day).padStart(2, '0')}.${String(rawDate.month).padStart(2, '0')}.${rawDate.year}`;
           if (rawDate.isoDate.includes(targetStr) || dmy.includes(targetStr)) return true;
         }
-        if (typeof rawVal === 'number') {
-          return this.matchesFormattedNumber(rawVal, targetStr, 'contains');
+        if (!isNaN(numRaw)) {
+          return this.matchesFormattedNumber(numRaw, targetStr, 'contains');
         }
         return false;
       case 'notcontains':
@@ -380,20 +435,20 @@ export class FilterEngine {
           const dmy = `${String(rawDate.day).padStart(2, '0')}.${String(rawDate.month).padStart(2, '0')}.${rawDate.year}`;
           if (rawDate.isoDate.includes(targetStr) || dmy.includes(targetStr)) return false;
         }
-        if (typeof rawVal === 'number' && this.matchesFormattedNumber(rawVal, targetStr, 'contains')) {
+        if (!isNaN(numRaw) && this.matchesFormattedNumber(numRaw, targetStr, 'contains')) {
           return false;
         }
         return true;
       case 'startswith':
         if (valStr.startsWith(targetStr)) return true;
-        if (typeof rawVal === 'number') {
-          return this.matchesFormattedNumber(rawVal, targetStr, 'startswith');
+        if (!isNaN(numRaw)) {
+          return this.matchesFormattedNumber(numRaw, targetStr, 'startswith');
         }
         return false;
       case 'endswith':
         if (valStr.endsWith(targetStr)) return true;
-        if (typeof rawVal === 'number') {
-          return this.matchesFormattedNumber(rawVal, targetStr, 'endswith');
+        if (!isNaN(numRaw)) {
+          return this.matchesFormattedNumber(numRaw, targetStr, 'endswith');
         }
         return false;
       case '=':

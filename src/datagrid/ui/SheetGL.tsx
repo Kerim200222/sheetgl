@@ -110,14 +110,22 @@ export interface SheetGLProps {
   className?: string;
 }
 
-function compileColumnFilters(map: Record<string, ColumnFilterState>): FilterDescriptor | null {
+export function compileColumnFilters(
+  map: Record<string, ColumnFilterState>,
+  excludeColumnId?: string
+): FilterDescriptor | null {
   const states = Object.values(map);
   if (states.length === 0) return null;
 
   const singleFilters: FilterDescriptor[] = [];
   for (const st of states) {
-    if (st.mode === 'values' && st.selectedValues) {
-      singleFilters.push([st.columnId, 'in', st.selectedValues]);
+    if (excludeColumnId && st.columnId === excludeColumnId) continue;
+    if (st.mode === 'values') {
+      if (st.semanticFilter) {
+        singleFilters.push(st.semanticFilter);
+      } else if (st.selectedValues) {
+        singleFilters.push([st.columnId, 'in', st.selectedValues]);
+      }
     } else if (st.mode === 'condition' && st.operator) {
       if (st.operator === 'between') {
         singleFilters.push([st.columnId, 'between', [st.value1, st.value2]]);
@@ -451,7 +459,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   const [cursorStyle, setCursorStyle] = useState<string>('cell');
   const [resizingCol, setResizingCol] = useState<{
     colIndex: number;
-     colId: string;
+    colId: string;
     startX: number;
     initialWidth: number;
   } | null>(null);
@@ -1574,7 +1582,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     setStoreVersion((v) => v + 1);
     requestRender();
 
-    const matchedCount = store.getRowCount();
+    const matchedCount = store.getFilteredRowCount?.() ?? store.getRowCount();
     const isTR = currentLocale.code.startsWith('tr');
     if (filterState) {
       showToast(
@@ -3416,6 +3424,7 @@ export const SheetGL: React.FC<SheetGLProps> = ({
             locale={currentLocale}
             store={store}
             activeFilter={columnFilters[headerFilterState.column.id]}
+            baseFilter={compileColumnFilters(columnFilters, headerFilterState.column.id)}
             onApply={(filterState) => {
               handleApplyColumnFilter(headerFilterState.column.id, filterState);
               setHeaderFilterState(null);
@@ -3622,7 +3631,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
         columns={columns}
         theme={resolvedTheme}
         locale={currentLocale}
-        totalRowCount={store.getRowCount()}
+        totalRowCount={store.getFilteredRowCount?.() ?? store.getRowCount()}
+        unfilteredRowCount={store.getTotalDatasetRowCount?.() ?? store.getRowCount()}
       />
     </div>
   );

@@ -3,7 +3,12 @@ import { ColumnDef } from '../types/grid';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { IDataStore } from '../types/store';
-import { ColumnFilterState, DistinctItem, FilterOperation } from '../types/filter';
+import {
+  ColumnFilterState,
+  DistinctItem,
+  FilterDescriptor,
+  FilterOperation,
+} from '../types/filter';
 import { BLANK_FILTER_TOKEN, FilterEngine } from '../core/FilterEngine';
 import { MaterialIcon } from '../ui/MaterialIcon';
 
@@ -15,6 +20,8 @@ export interface HeaderFilterPopoverProps {
   locale: IGridLocale;
   store: IDataStore;
   activeFilter?: ColumnFilterState;
+  /** Composite filter of all OTHER active columns (excluding this column) for context-aware counts */
+  baseFilter?: FilterDescriptor | null;
   onApply: (filterState: ColumnFilterState | null) => void;
   onSort?: (desc: boolean) => void;
   onToggleGroup?: () => void;
@@ -126,6 +133,107 @@ type FlatDateTreeRow =
       key: string;
       item: DistinctItem;
     };
+
+/**
+ * Compiles selected Year > Month > Day hierarchy nodes into a compact, server-friendly
+ * AST FilterDescriptor (`between` for full years/months, `in`/`=` with ISO dates for specific days).
+ */
+function compileSemanticDateTreeFilter(
+  columnId: string,
+  hierarchy: {
+    blankItem: DistinctItem | null;
+    years: DateYearNode[];
+    otherItems: DistinctItem[];
+  },
+  selectedSet: Set<any>
+): FilterDescriptor | undefined {
+  const orClauses: FilterDescriptor[] = [];
+  const checkedIsoDays: string[] = [];
+  const explicitRawValues: any[] = [];
+
+  if (hierarchy.blankItem && selectedSet.has(hierarchy.blankItem.value)) {
+    explicitRawValues.push(BLANK_FILTER_TOKEN);
+  }
+
+  for (const oItem of hierarchy.otherItems) {
+    if (selectedSet.has(oItem.value)) {
+      explicitRawValues.push(oItem.value);
+    }
+  }
+
+  for (const yNode of hierarchy.years) {
+    const allYearChecked =
+      yNode.rawValues.length > 0 && yNode.rawValues.every((v) => selectedSet.has(v));
+    if (allYearChecked) {
+      orClauses.push([
+        columnId,
+        'between',
+        [`${yNode.year}-01-01`, `${yNode.year}-12-31`],
+      ]);
+      continue;
+    }
+
+    const someYearChecked = yNode.rawValues.some((v) => selectedSet.has(v));
+    if (!someYearChecked) continue;
+
+    for (const mNode of yNode.months) {
+      const allMonthChecked =
+        mNode.rawValues.length > 0 && mNode.rawValues.every((v) => selectedSet.has(v));
+      if (allMonthChecked) {
+        const mm = String(mNode.month).padStart(2, '0');
+        const lastDay = new Date(mNode.year, mNode.month, 0).getDate();
+        const dd = String(lastDay).padStart(2, '0');
+        orClauses.push([
+          columnId,
+          'between',
+          [`${mNode.year}-${mm}-01`, `${mNode.year}-${mm}-${dd}`],
+        ]);
+        continue;
+      }
+
+      const someMonthChecked = mNode.rawValues.some((v) => selectedSet.has(v));
+      if (!someMonthChecked) continue;
+
+      for (const dNode of mNode.days) {
+        const allDayChecked =
+          dNode.rawValues.length > 0 && dNode.rawValues.every((v) => selectedSet.has(v));
+        if (allDayChecked) {
+          checkedIsoDays.push(dNode.isoDate);
+        } else {
+          for (const rv of dNode.rawValues) {
+            if (selectedSet.has(rv)) {
+              explicitRawValues.push(rv);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (checkedIsoDays.length === 1) {
+    orClauses.push([columnId, '=', checkedIsoDays[0]]);
+  } else if (checkedIsoDays.length > 1) {
+    orClauses.push([columnId, 'in', checkedIsoDays]);
+  }
+
+  if (explicitRawValues.length > 0) {
+    orClauses.push([columnId, 'in', explicitRawValues]);
+  }
+
+  if (orClauses.length === 0) {
+    return [columnId, 'in', []];
+  }
+  if (orClauses.length === 1) {
+    return orClauses[0];
+  }
+
+  const composite: any[] = [];
+  orClauses.forEach((clause, idx) => {
+    if (idx > 0) composite.push('or');
+    composite.push(clause);
+  });
+  return composite;
+}
 
 /**
  * Formats a raw cell value identically to how the cell painter renders it on Canvas.
@@ -281,6 +389,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   locale,
   store,
   activeFilter,
+  baseFilter,
   onApply,
   onSort,
   onToggleGroup,
@@ -330,11 +439,11 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const condInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Fetch all distinct values once when opened for this column
+  // Fetch context-aware distinct values (respecting other columns' active filters via baseFilter)
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    store.getDistinctValues(column.id).then((res) => {
+    store.getDistinctValues(column.id, undefined, baseFilter).then((res) => {
       if (!mounted) return;
       setAllItems(res);
 
@@ -359,9 +468,31 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
         }
       }
 
-      if (activeFilter && activeFilter.mode === 'values' && activeFilter.selectedValues) {
-        setSelectedSet(new Set(activeFilter.selectedValues));
-      } else if (activeFilter && activeFilter.mode === 'condition' && activeFilter.operator) {
+      if (activeFilter && activeFilter.mode === 'values') {
+        if (isDateCol && activeFilter.semanticFilter) {
+          const directSet = new Set(activeFilter.selectedValues || []);
+          const matchedValues: any[] = [];
+          for (const r of res) {
+            const rawVal = r.value === BLANK_FILTER_TOKEN ? '' : r.value;
+            if (
+              directSet.has(r.value) ||
+              FilterEngine.evaluateRow({ [column.id]: rawVal }, activeFilter.semanticFilter)
+            ) {
+              matchedValues.push(r.value);
+            }
+          }
+          setSelectedSet(new Set(matchedValues));
+        } else if (activeFilter.selectedValues) {
+          setSelectedSet(new Set(activeFilter.selectedValues));
+        } else {
+          setSelectedSet(new Set(res.map((r) => r.value)));
+        }
+      } else if (
+        isDateCol &&
+        activeFilter &&
+        activeFilter.mode === 'condition' &&
+        activeFilter.operator
+      ) {
         const op = activeFilter.operator;
         const target =
           op === 'between'
@@ -376,6 +507,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
         }
         setSelectedSet(new Set(matchedValues));
       } else {
+        // Keep Value List checkboxes intact (all selected) when no value-list filter is active
         setSelectedSet(new Set(res.map((r) => r.value)));
       }
       setLoading(false);
@@ -383,7 +515,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
     return () => {
       mounted = false;
     };
-  }, [column.id, store]);
+  }, [column.id, store, baseFilter, isDateCol]);
 
   useEffect(() => {
     if (tab === 'values') {
@@ -411,7 +543,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
     return formatCellStructureValue(it.value, column, locale);
   };
 
-  // Helper to sync non-date condition inputs with selectedSet so Value List & Condition Rule stay synchronized
+  // Updates non-date condition inputs without mutating or corrupting Value List (selectedSet)
   const syncConditionToSelection = (
     nextV1: string,
     nextV2: string,
@@ -420,27 +552,6 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
     setCondVal1(nextV1);
     setCondVal2(nextV2);
     setOperator(nextOp);
-
-    const hasInput =
-      nextV1.trim() !== '' || (nextOp === 'between' && nextV2.trim() !== '');
-    if (!hasInput && nextOp !== '=') {
-      setSelectedSet(new Set(allItems.map((r) => r.value)));
-      return;
-    }
-
-    const parsedV1 = isNumericCol ? FilterEngine.parseNumeric(nextV1) : nextV1;
-    const parsedV2 = isNumericCol ? FilterEngine.parseNumeric(nextV2) : nextV2;
-    const target = nextOp === 'between' ? [parsedV1, parsedV2] : parsedV1;
-
-    const nextSel = new Set<any>();
-    for (let i = 0; i < allItems.length; i++) {
-      const it = allItems[i];
-      const rawVal = it.value === BLANK_FILTER_TOKEN ? '' : it.value;
-      if (FilterEngine.match(rawVal, nextOp, target)) {
-        nextSel.add(it.value);
-      }
-    }
-    setSelectedSet(nextSel);
   };
 
   // Helper to sync Between date range inputs with the Year > Month > Day tree selection
@@ -739,7 +850,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
     return { min, max, avg, hasNegative };
   }, [isNumericCol, allItems]);
 
-  // Live count of rows matching the current Condition Rule
+  // Live count of rows matching the current Condition Rule (scoped to context-aware allItems)
   const conditionMatchCount = useMemo(() => {
     const hasCondInput = condVal1.trim() !== '' || (operator === 'between' && condVal2.trim() !== '');
     if (!hasCondInput && operator !== '=') return null;
@@ -760,6 +871,40 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
     }
     return { matched, total };
   }, [condVal1, condVal2, operator, allItems, isNumericCol]);
+
+  // Exact preview count of rows that will be displayed when the user clicks Apply
+  const applyPreviewRowCount = useMemo(() => {
+    const hasBetweenInput =
+      isDateCol &&
+      operator === 'between' &&
+      (condVal1.trim() !== '' || condVal2.trim() !== '');
+
+    if (tab === 'condition' || (isRangeDriven && hasBetweenInput)) {
+      if (conditionMatchCount) {
+        return conditionMatchCount.matched;
+      }
+      return allItems.reduce((acc, it) => acc + (it.count ?? 1), 0);
+    }
+
+    let sum = 0;
+    for (let i = 0; i < allItems.length; i++) {
+      const it = allItems[i];
+      if (selectedSet.has(it.value)) {
+        sum += it.count ?? 1;
+      }
+    }
+    return sum;
+  }, [
+    tab,
+    isDateCol,
+    operator,
+    condVal1,
+    condVal2,
+    isRangeDriven,
+    conditionMatchCount,
+    allItems,
+    selectedSet,
+  ]);
 
   const areAllVisibleChecked =
     visibleItems.length > 0 && visibleItems.every((it) => selectedSet.has(it.value));
@@ -896,13 +1041,17 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
       (condVal1.trim() !== '' || condVal2.trim() !== '');
 
     if (tab === 'values' && !(isRangeDriven && hasBetweenInput)) {
-      if (allItems.length > 0 && selectedSet.size === allItems.length) {
+      if (allItems.length > 0 && selectedSet.size === allItems.length && !search.trim()) {
         onApply(null);
       } else {
+        const semanticFilter = isDateCol
+          ? compileSemanticDateTreeFilter(column.id, dateHierarchy, selectedSet)
+          : undefined;
         onApply({
           columnId: column.id,
           mode: 'values',
           selectedValues: Array.from(selectedSet),
+          ...(semanticFilter ? { semanticFilter } : {}),
         });
       }
     } else {
@@ -2515,7 +2664,9 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
               fontSize: 11,
             }}
           >
-            {locale.apply}
+            {loading
+              ? locale.apply
+              : `${locale.apply} (${applyPreviewRowCount.toLocaleString(locale.code)})`}
           </button>
         </div>
       </div>

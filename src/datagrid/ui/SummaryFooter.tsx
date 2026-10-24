@@ -25,6 +25,7 @@ export interface SummaryFooterProps {
   theme: IGridThemeTokens;
   locale: IGridLocale;
   totalRowCount: number;
+  unfilteredRowCount?: number;
 }
 
 const SUMMARY_TYPE_ICONS: Record<SummaryType, string> = {
@@ -47,6 +48,7 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
   theme,
   locale,
   totalRowCount,
+  unfilteredRowCount,
 }) => {
   const [openConfigCol, setOpenConfigCol] = useState<string | null>(null);
   const [showAddSummary, setShowAddSummary] = useState<boolean>(false);
@@ -123,7 +125,11 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
             />
             <span>
               {locale.totalRecords}:{' '}
-              <strong>{totalRowCount.toLocaleString(locale.code)}</strong>
+              <strong>
+                {unfilteredRowCount !== undefined && unfilteredRowCount !== totalRowCount
+                  ? `${totalRowCount.toLocaleString(locale.code)} / ${unfilteredRowCount.toLocaleString(locale.code)}`
+                  : totalRowCount.toLocaleString(locale.code)}
+              </strong>
             </span>
           </span>
         )}
