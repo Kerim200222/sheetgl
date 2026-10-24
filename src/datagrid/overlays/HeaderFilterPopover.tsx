@@ -141,12 +141,21 @@ export function formatCellStructureValue(
 
   const isTR = locale.code.startsWith('tr');
 
-  if (column.type === 'date' || column.type === 'datetime') {
+  const colType = (column.type || '').toLowerCase();
+  if (colType === 'date' || colType === 'datetime') {
     return FilterEngine.formatLocalizedDate(
       rawVal,
       locale.code,
-      column.type === 'datetime'
+      colType === 'datetime'
     );
+  }
+
+  // Fallback: If value matches ISO date string pattern, format semantically
+  if (typeof rawVal === 'string' && /^\d{4}-\d{2}-\d{2}/.test(rawVal.trim())) {
+    const parsed = FilterEngine.parseDateParts(rawVal);
+    if (parsed) {
+      return FilterEngine.formatLocalizedDate(rawVal, locale.code, false);
+    }
   }
 
   if (column.type === 'currency') {
@@ -279,8 +288,9 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   onClose,
 }) => {
   const isTR = locale.code.startsWith('tr');
-  const isNumericCol = NUMERIC_COLUMN_TYPES.has(column.type);
-  const isDateCol = column.type === 'date' || column.type === 'datetime';
+  const colType = (column.type || '').toLowerCase();
+  const isNumericCol = NUMERIC_COLUMN_TYPES.has(colType) || NUMERIC_COLUMN_TYPES.has(column.type);
+  const isDateCol = colType === 'date' || colType === 'datetime';
   const monthNames = isTR ? TR_MONTH_NAMES : EN_MONTH_NAMES;
 
   const [tab, setTab] = useState<'values' | 'condition'>(activeFilter?.mode || 'values');
@@ -395,6 +405,9 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   }, [onClose]);
 
   const formatItemLabel = (it: DistinctItem): string => {
+    if (isDateCol || (typeof it.value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(it.value.trim()))) {
+      return FilterEngine.formatLocalizedDate(it.value, locale.code, colType === 'datetime');
+    }
     return formatCellStructureValue(it.value, column, locale);
   };
 

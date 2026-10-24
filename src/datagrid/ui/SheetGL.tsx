@@ -608,7 +608,8 @@ export const SheetGL: React.FC<SheetGLProps> = ({
   const canEditCell = useCallback(
     (row: Record<string, any> | undefined, colDef: ColumnDef | undefined, rowIndex: number = 0, silent: boolean = false): boolean => {
       if (!colDef || !row) return false;
-      if (colDef.type === 'sparkline' || colDef.type === 'action') return false;
+      const cType = (colDef.type || '').toLowerCase();
+      if (cType === 'sparkline' || cType === 'action' || cType === 'pdf') return false;
 
       if (
         permissions.mode === 'read' ||
@@ -1693,10 +1694,25 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       if (!hit) return;
 
       if (isDraggingSelection) {
+        const selRange = selectionRef.current.selectionRange;
+        const startCol = selRange ? selRange.startCol : selectionRef.current.activeCell.col;
+        const startColDef = geometryRef.current.columns[startCol];
+        const startColType = (startColDef?.type || '').toLowerCase();
+        if (startColType === 'action' || startColType === 'pdf') {
+          setIsDraggingSelection(false);
+          return;
+        }
+
         selectionRef.current.setRangeEnd(hit.row, hit.col);
         setSelectionVersion((v) => v + 1);
         requestRender();
       } else if (fillDragState) {
+        const srcColDef = geometryRef.current.columns[fillDragState.sourceRange.minCol];
+        const srcColType = (srcColDef?.type || '').toLowerCase();
+        if (srcColType === 'action' || srcColType === 'pdf') {
+          setFillDragState(null);
+          return;
+        }
         const src = fillDragState.sourceRange;
         const minRow = Math.min(src.minRow, hit.row);
         const maxRow = Math.max(src.maxRow, hit.row);
@@ -1809,9 +1825,11 @@ export const SheetGL: React.FC<SheetGLProps> = ({
 
     window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleWindowMouseUp);
+    window.addEventListener('blur', handleWindowMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
+      window.removeEventListener('blur', handleWindowMouseUp);
     };
   }, [
     isDraggingSelection,
@@ -1994,10 +2012,12 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     // 3. Check Fill Handle / Right Duplicate Button Hover (Skip for sparkline / action / readonly)
     const normForHover = selectionRef.current.getNormalizedRange();
     const activeColForHover = geom.columns[normForHover.maxCol];
+    const hoverColType = (activeColForHover?.type || '').toLowerCase();
     const isSpecialNonDup =
       !activeColForHover ||
-      activeColForHover.type === 'sparkline' ||
-      activeColForHover.type === 'action' ||
+      hoverColType === 'sparkline' ||
+      hoverColType === 'action' ||
+      hoverColType === 'pdf' ||
       CanvasRenderer.isColumnReadonly(activeColForHover, permissions);
 
     if (!isSpecialNonDup) {
@@ -2142,10 +2162,12 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     // D. Fill Handle or Right-Side Cell Duplicate Handle
     const normForDup = selectionRef.current.getNormalizedRange();
     const activeColForDup = geom.columns[normForDup.maxCol];
+    const dupColType = (activeColForDup?.type || '').toLowerCase();
     const isSpecialNonDupCol =
       !activeColForDup ||
-      activeColForDup.type === 'sparkline' ||
-      activeColForDup.type === 'action' ||
+      dupColType === 'sparkline' ||
+      dupColType === 'action' ||
+      dupColType === 'pdf' ||
       CanvasRenderer.isColumnReadonly(activeColForDup, permissions);
 
     const canDup =
@@ -2196,16 +2218,22 @@ export const SheetGL: React.FC<SheetGLProps> = ({
       return;
     }
 
-    if (e.shiftKey) {
+    const colDef = geom.columns[hit.col];
+    const colType = (colDef?.type || '').toLowerCase();
+    const isInteractiveCol = colType === 'action' || colType === 'pdf';
+
+    if (e.shiftKey && !isInteractiveCol) {
       selectionRef.current.setRangeEnd(hit.row, hit.col);
     } else {
       selectionRef.current.setActiveCell(hit.row, hit.col);
       setSelectedCellUI({ row: hit.row, col: hit.col });
-      setIsDraggingSelection(true);
+      if (!isInteractiveCol) {
+        setIsDraggingSelection(true);
+      } else {
+        setIsDraggingSelection(false);
+      }
     }
     setSelectionVersion((v) => v + 1);
-
-    const colDef = geom.columns[hit.col];
 
     // Row Selection Column Click ('__selection__')
     if (colDef.id === '__selection__' && vRow && vRow.type === 'data') {
@@ -2259,9 +2287,9 @@ export const SheetGL: React.FC<SheetGLProps> = ({
     }
 
     if (plugin.onPointerDown && vRow && vRow.type === 'data') {
-      // Action column works even in read mode; mutable plugins check canEditCell
-      const isAction = colDef.type === 'action';
-      if (isAction || canEditCell(vRow.data, colDef, hit.row, false)) {
+      // Action & PDF columns work even in read mode; mutable plugins check canEditCell
+      const isActionOrPdf = colType === 'action' || colType === 'pdf';
+      if (isActionOrPdf || canEditCell(vRow.data, colDef, hit.row, false)) {
         let shouldFocusContainer = true;
         const res = plugin.onPointerDown({
           localX: hit.localX,
@@ -2275,7 +2303,14 @@ export const SheetGL: React.FC<SheetGLProps> = ({
           },
         });
 
-        if (res.shouldOpenEditor) {
+        if (res && res.handled) {
+          setIsDraggingSelection(false);
+          setFillDragState(null);
+          selectionRef.current.setActiveCell(hit.row, hit.col);
+          setSelectionVersion((v) => v + 1);
+        }
+
+        if (res && res.shouldOpenEditor) {
           shouldFocusContainer = false;
           setIsDraggingSelection(false);
           openEditorForCell(hit.row, hit.col);

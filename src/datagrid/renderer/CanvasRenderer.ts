@@ -348,10 +348,12 @@ export class CanvasRenderer {
           ctx.strokeRect(rLeftX, rTopY, rWidth, rHeight);
 
           const activeColDef = geometry.columns[normSel.maxCol];
+          const activeColType = (activeColDef?.type || '').toLowerCase();
           const isSpecialNonDuplicatable =
             !activeColDef ||
-            activeColDef.type === 'sparkline' ||
-            activeColDef.type === 'action' ||
+            activeColType === 'sparkline' ||
+            activeColType === 'action' ||
+            activeColType === 'pdf' ||
             this.isColumnReadonly(activeColDef, permissions);
 
           const canDuplicate =

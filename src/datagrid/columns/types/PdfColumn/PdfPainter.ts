@@ -13,15 +13,6 @@ export function paintPdf({
 }: CellPaintContext<string>): void {
   const raw = value != null ? String(value).trim() : '';
   if (!raw) {
-    if (isHovered) {
-      ctx.save();
-      ctx.fillStyle = theme.isDark ? '#475569' : '#CBD5E1';
-      ctx.font = `400 12px ${theme.fontFamily}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('-', x + width / 2, y + height / 2);
-      ctx.restore();
-    }
     return;
   }
 

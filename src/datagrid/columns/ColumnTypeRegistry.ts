@@ -4,11 +4,16 @@ export class ColumnTypeRegistry {
   private static plugins: Map<string, IColumnTypePlugin> = new Map();
 
   public static register(plugin: IColumnTypePlugin): void {
-    this.plugins.set(plugin.type, plugin);
+    const key = (plugin.type || '').toLowerCase();
+    this.plugins.set(key, plugin);
+    if (plugin.type && plugin.type !== key) {
+      this.plugins.set(plugin.type, plugin);
+    }
   }
 
   public static get(type: string): IColumnTypePlugin {
-    const plugin = this.plugins.get(type);
+    const key = (type || '').toLowerCase();
+    const plugin = this.plugins.get(key) || this.plugins.get(type);
     if (!plugin) {
       // Bulunamadıysa text eklentisine geri dön
       return this.plugins.get('text')!;
@@ -17,10 +22,11 @@ export class ColumnTypeRegistry {
   }
 
   public static has(type: string): boolean {
-    return this.plugins.has(type);
+    const key = (type || '').toLowerCase();
+    return this.plugins.has(key) || this.plugins.has(type);
   }
 
   public static getAll(): IColumnTypePlugin[] {
-    return Array.from(this.plugins.values());
+    return Array.from(new Set(this.plugins.values()));
   }
 }
