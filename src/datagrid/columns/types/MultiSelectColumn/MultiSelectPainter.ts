@@ -32,7 +32,7 @@ export function normalizeMultiValue(value: any): string[] {
   }
   if (typeof value === 'string') {
     return value
-      .split(/[,;|]/)
+      .split(/[,;|]|\s\+\s/)
       .map((s) => s.trim())
       .filter(Boolean);
   }

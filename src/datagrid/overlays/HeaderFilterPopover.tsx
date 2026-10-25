@@ -10,6 +10,7 @@ import {
   FilterOperation,
 } from '../types/filter';
 import { BLANK_FILTER_TOKEN, FilterEngine } from '../core/FilterEngine';
+import { SortEngine } from '../core/SortEngine';
 import { MaterialIcon } from '../ui/MaterialIcon';
 
 export interface HeaderFilterPopoverProps {
@@ -439,83 +440,145 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const condInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Stable stringified representation of baseFilter to prevent infinite loading loops on every frame
+  const baseFilterKey = useMemo(() => (baseFilter ? JSON.stringify(baseFilter) : ''), [baseFilter]);
+
   // Fetch context-aware distinct values (respecting other columns' active filters via baseFilter)
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    store.getDistinctValues(column.id, undefined, baseFilter).then((res) => {
-      if (!mounted) return;
-      setAllItems(res);
+    store
+      .getDistinctValues(column.id, undefined, baseFilter)
+      .then((res) => {
+        if (!mounted) return;
 
-      // Initialize Year > Month > Day tree expansion for date columns
-      if (isDateCol) {
-        const yearsSet = new Set<number>();
-        const monthsSet = new Set<string>();
-        let dayTotal = 0;
-        for (const r of res) {
-          const p = FilterEngine.parseDateParts(r.value);
-          if (p) {
-            yearsSet.add(p.year);
-            monthsSet.add(`${p.year}-${p.month}`);
-            dayTotal++;
+        // Unpack composite delimited strings for multiselect columns so each item (e.g. H1(PA), H2(PB)) has its own checkbox
+        let processedRes = res;
+        if (colType === 'multiselect') {
+          const tokenMap = new Map<string, number>();
+          let blankCnt = 0;
+          for (const it of res) {
+            if (it.value === BLANK_FILTER_TOKEN || it.value === '' || it.value === null || it.value === undefined) {
+              blankCnt += it.count || 1;
+              continue;
+            }
+            const raw = String(it.value);
+            const parts = raw.split(/[,;|]|\s\+\s/).map((s) => s.trim()).filter(Boolean);
+            if (parts.length === 0) {
+              blankCnt += it.count || 1;
+            } else {
+              for (const p of parts) {
+                tokenMap.set(p, (tokenMap.get(p) || 0) + (it.count || 1));
+              }
+            }
+          }
+
+          // Ensure predefined options from column.options are available even if count is 0
+          if (column.options && column.options.length > 0) {
+            for (const opt of column.options) {
+              if (!tokenMap.has(opt.value)) {
+                tokenMap.set(opt.value, 0);
+              }
+            }
+          }
+
+          const unpackedItems: DistinctItem[] = [];
+          if (blankCnt > 0) {
+            unpackedItems.push({
+              value: BLANK_FILTER_TOKEN,
+              label: locale.code.startsWith('tr') ? '(Boş / Blank)' : '(Blank)',
+              count: blankCnt,
+            });
+          }
+          for (const [tVal, tCount] of tokenMap.entries()) {
+            unpackedItems.push({
+              value: tVal,
+              label: tVal,
+              count: tCount,
+            });
+          }
+          unpackedItems.sort((a, b) => {
+            if (a.value === BLANK_FILTER_TOKEN) return -1;
+            if (b.value === BLANK_FILTER_TOKEN) return 1;
+            return SortEngine.compareValues(a.value, b.value);
+          });
+          processedRes = unpackedItems;
+        }
+
+        setAllItems(processedRes);
+
+        // Initialize Year > Month > Day tree expansion for date columns
+        if (isDateCol) {
+          const yearsSet = new Set<number>();
+          const monthsSet = new Set<string>();
+          let dayTotal = 0;
+          for (const r of processedRes) {
+            const p = FilterEngine.parseDateParts(r.value);
+            if (p) {
+              yearsSet.add(p.year);
+              monthsSet.add(`${p.year}-${p.month}`);
+              dayTotal++;
+            }
+          }
+          setExpandedYears(yearsSet);
+          if (dayTotal <= 120) {
+            setExpandedMonths(monthsSet);
+          } else {
+            setExpandedMonths(new Set());
           }
         }
-        setExpandedYears(yearsSet);
-        if (dayTotal <= 120) {
-          setExpandedMonths(monthsSet);
-        } else {
-          setExpandedMonths(new Set());
-        }
-      }
 
-      if (activeFilter && activeFilter.mode === 'values') {
-        if (isDateCol && activeFilter.semanticFilter) {
-          const directSet = new Set(activeFilter.selectedValues || []);
+        if (activeFilter && activeFilter.mode === 'values') {
+          if (isDateCol && activeFilter.semanticFilter) {
+            const directSet = new Set(activeFilter.selectedValues || []);
+            const matchedValues: any[] = [];
+            for (const r of processedRes) {
+              const rawVal = r.value === BLANK_FILTER_TOKEN ? '' : r.value;
+              if (
+                directSet.has(r.value) ||
+                FilterEngine.evaluateRow({ [column.id]: rawVal }, activeFilter.semanticFilter)
+              ) {
+                matchedValues.push(r.value);
+              }
+            }
+            setSelectedSet(new Set(matchedValues));
+          } else if (activeFilter.selectedValues) {
+            setSelectedSet(new Set(activeFilter.selectedValues));
+          } else {
+            setSelectedSet(new Set(processedRes.map((r) => r.value)));
+          }
+        } else if (
+          isDateCol &&
+          activeFilter &&
+          activeFilter.mode === 'condition' &&
+          activeFilter.operator
+        ) {
+          const op = activeFilter.operator;
+          const target =
+            op === 'between'
+              ? [activeFilter.value1, activeFilter.value2]
+              : activeFilter.value1;
           const matchedValues: any[] = [];
-          for (const r of res) {
+          for (const r of processedRes) {
             const rawVal = r.value === BLANK_FILTER_TOKEN ? '' : r.value;
-            if (
-              directSet.has(r.value) ||
-              FilterEngine.evaluateRow({ [column.id]: rawVal }, activeFilter.semanticFilter)
-            ) {
+            if (FilterEngine.match(rawVal, op, target)) {
               matchedValues.push(r.value);
             }
           }
           setSelectedSet(new Set(matchedValues));
-        } else if (activeFilter.selectedValues) {
-          setSelectedSet(new Set(activeFilter.selectedValues));
         } else {
-          setSelectedSet(new Set(res.map((r) => r.value)));
+          // Keep Value List checkboxes intact (all selected) when no value-list filter is active
+          setSelectedSet(new Set(processedRes.map((r) => r.value)));
         }
-      } else if (
-        isDateCol &&
-        activeFilter &&
-        activeFilter.mode === 'condition' &&
-        activeFilter.operator
-      ) {
-        const op = activeFilter.operator;
-        const target =
-          op === 'between'
-            ? [activeFilter.value1, activeFilter.value2]
-            : activeFilter.value1;
-        const matchedValues: any[] = [];
-        for (const r of res) {
-          const rawVal = r.value === BLANK_FILTER_TOKEN ? '' : r.value;
-          if (FilterEngine.match(rawVal, op, target)) {
-            matchedValues.push(r.value);
-          }
-        }
-        setSelectedSet(new Set(matchedValues));
-      } else {
-        // Keep Value List checkboxes intact (all selected) when no value-list filter is active
-        setSelectedSet(new Set(res.map((r) => r.value)));
-      }
-      setLoading(false);
-    });
+        setLoading(false);
+      })
+      .catch(() => {
+        if (mounted) setLoading(false);
+      });
     return () => {
       mounted = false;
     };
-  }, [column.id, store, baseFilter, isDateCol]);
+  }, [column.id, store, baseFilterKey, isDateCol]);
 
   useEffect(() => {
     if (tab === 'values') {
@@ -1861,7 +1924,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
             onScroll={(e) => setListScrollTop(e.currentTarget.scrollTop)}
             style={{ height: 210, overflowY: 'auto', padding: '4px 6px', position: 'relative' }}
           >
-            {loading ? (
+            {loading && allItems.length === 0 ? (
               <div style={{ padding: '12px 8px', color: '#8E8E93' }}>{locale.loading}</div>
             ) : isDateCol ? (
               flatDateTreeRows.length === 0 ? (

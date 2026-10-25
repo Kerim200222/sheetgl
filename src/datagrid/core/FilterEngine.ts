@@ -378,6 +378,15 @@ export class FilterEngine {
         }
         return false;
       }
+      if (typeof rawVal === 'string' && (rawVal.includes(',') || rawVal.includes(';') || rawVal.includes('|') || rawVal.includes(' + '))) {
+        const tokens = rawVal.split(/[,;|]|\s\+\s/).map((s) => s.trim()).filter(Boolean);
+        for (let i = 0; i < tokens.length; i++) {
+          const elem = tokens[i];
+          if (compiled.rawSet.has(elem) || compiled.lowerSet.has(elem.toLowerCase())) {
+            return true;
+          }
+        }
+      }
       if (compiled.rawSet.has(rawVal)) return true;
       if (compiled.lowerSet.has(this.stringifyValue(rawVal).toLowerCase())) return true;
       return this.matchesCompiledDateSet(rawVal, compiled);
@@ -395,6 +404,15 @@ export class FilterEngine {
           }
         }
         return true;
+      }
+      if (typeof rawVal === 'string' && (rawVal.includes(',') || rawVal.includes(';') || rawVal.includes('|') || rawVal.includes(' + '))) {
+        const tokens = rawVal.split(/[,;|]|\s\+\s/).map((s) => s.trim()).filter(Boolean);
+        for (let i = 0; i < tokens.length; i++) {
+          const elem = tokens[i];
+          if (compiled.rawSet.has(elem) || compiled.lowerSet.has(elem.toLowerCase())) {
+            return false;
+          }
+        }
       }
       if (compiled.rawSet.has(rawVal)) return false;
       if (compiled.lowerSet.has(this.stringifyValue(rawVal).toLowerCase())) return false;

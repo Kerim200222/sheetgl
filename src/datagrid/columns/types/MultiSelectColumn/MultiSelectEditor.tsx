@@ -34,11 +34,17 @@ export const MultiSelectEditor: React.FC<CellEditorProps<string[] | string>> = (
     inputRef.current?.focus();
   }, []);
 
+  const commitValue = (items: string[], moveDir: 'none' | 'down' | 'left' | 'right') => {
+    const sep = (column as any).separator || ',';
+    const finalVal = Array.isArray(value) ? items : items.join(sep);
+    onCommit(finalVal, moveDir);
+  };
+
   // Commit when clicking outside
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        onCommit(latestSelectedRef.current, 'none');
+        commitValue(latestSelectedRef.current, 'none');
       }
     };
     document.addEventListener('mousedown', handleOutside, true);
@@ -72,10 +78,10 @@ export const MultiSelectEditor: React.FC<CellEditorProps<string[] | string>> = (
       toggleValue(filtered[highlightedIndex].value);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      onCommit(selected, 'down');
+      commitValue(selected, 'down');
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      onCommit(selected, e.shiftKey ? 'left' : 'right');
+      commitValue(selected, e.shiftKey ? 'left' : 'right');
     } else if (e.key === 'Escape') {
       e.preventDefault();
       onCancel();

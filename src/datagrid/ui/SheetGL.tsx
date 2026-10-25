@@ -453,6 +453,11 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     column: ColumnDef;
     rect: { x: number; y: number; width: number; height: number };
   } | null>(null);
+
+  const activeBaseFilter = useMemo(() => {
+    if (!headerFilterState) return undefined;
+    return compileColumnFilters(columnFilters, headerFilterState.column.id);
+  }, [columnFilters, headerFilterState?.column.id]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [sparklineModal, setSparklineModal] = useState<SparklineModalState | null>(null);
   const [pdfModal, setPdfModal] = useState<PdfPreviewModalState | null>(null);
@@ -3336,7 +3341,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             locale={currentLocale}
             store={store}
             activeFilter={columnFilters[headerFilterState.column.id]}
-            baseFilter={compileColumnFilters(columnFilters, headerFilterState.column.id)}
+            baseFilter={activeBaseFilter}
             onApply={(filterState) => {
               handleApplyColumnFilter(headerFilterState.column.id, filterState);
               setHeaderFilterState(null);
