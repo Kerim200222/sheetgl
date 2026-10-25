@@ -93,6 +93,8 @@ export interface SheetGLProps {
     filter: FilterDescriptor | null,
     columnFilters: Record<string, ColumnFilterState>
   ) => void;
+  /** Callback fired when a column is interactively resized */
+  onColumnResize?: (columnId: string, newWidth: number) => void;
 
   // Enterprise Lifecycle Event Triggers
   onEditingStart?: (e: EditingStartEvent) => void;
@@ -190,6 +192,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onSaved,
     remoteOperations,
     onFilterChange,
+    onColumnResize,
     style,
     className,
   },
@@ -433,7 +436,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     rowCount: store.getRowCount(),
     onRequestRender: () => requestRenderRef.current(),
     onActiveOverlayClear: () => setActiveOverlay(null),
+    onColumnResize,
   });
+
 
   const historyRef = useRef<HistoryManager>(new HistoryManager(100));
   // 5. UI State Management

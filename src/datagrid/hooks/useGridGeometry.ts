@@ -12,6 +12,7 @@ export interface UseGridGeometryOptions {
   rowCount?: number;
   onRequestRender?: () => void;
   onActiveOverlayClear?: () => void;
+  onColumnResize?: (colId: string, newWidth: number) => void;
 }
 
 export interface ColumnResizeState {
@@ -69,7 +70,9 @@ export function useGridGeometry({
   rowCount = 0,
   onRequestRender,
   onActiveOverlayClear,
+  onColumnResize,
 }: UseGridGeometryOptions): UseGridGeometryReturn {
+
   // 1. Column state synced with props
   const [columns, setColumns] = useState<ColumnDef[]>(userColumns);
   useEffect(() => {
@@ -123,20 +126,26 @@ export function useGridGeometry({
 
   // 5. Column Resizing State
   const [resizingCol, setResizingCol] = useState<ColumnResizeState | null>(null);
+  const latestResizedWidthRef = useRef<{ colId: string; width: number } | null>(null);
 
   // Column Resizing mouse drag effect
   useEffect(() => {
     if (!resizingCol) return;
 
+    latestResizedWidthRef.current = { colId: resizingCol.colId, width: resizingCol.initialWidth };
     const handleMouseMove = (e: MouseEvent) => {
       const deltaX = e.clientX - resizingCol.startX;
       const newWidth = Math.max(48, resizingCol.initialWidth + deltaX);
+      latestResizedWidthRef.current = { colId: resizingCol.colId, width: newWidth };
       setColumns((prev) =>
         prev.map((c) => (c.id === resizingCol.colId ? { ...c, width: newWidth } : c))
       );
     };
 
     const handleMouseUp = () => {
+      if (latestResizedWidthRef.current) {
+        onColumnResize?.(latestResizedWidthRef.current.colId, latestResizedWidthRef.current.width);
+      }
       setResizingCol(null);
     };
 
@@ -146,7 +155,8 @@ export function useGridGeometry({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [resizingCol]);
+  }, [resizingCol, onColumnResize]);
+
 
   // ResizeObserver on containers
   useEffect(() => {
