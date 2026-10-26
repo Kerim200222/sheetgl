@@ -255,9 +255,35 @@ const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
     showBatchModal,
     deleteConfirmModal,
     toastMessage,
-    cursorStyle,
-    fillDragState,
   } = state;
+
+  // Synchronize incoming external prop changes to context actions
+  useEffect(() => {
+    if (userTheme !== undefined && userTheme !== currentThemeName) {
+      actions.setThemeName(userTheme);
+    }
+  }, [userTheme, currentThemeName, actions]);
+
+  useEffect(() => {
+    if (userLocale !== undefined) {
+      const resolved = LocaleEngine.resolve(userLocale);
+      if (resolved.code !== currentLocale.code) {
+        actions.setLocale(resolved);
+      }
+    }
+  }, [userLocale, currentLocale, actions]);
+
+  useEffect(() => {
+    if (userPermissions !== undefined && userPermissions !== permissions) {
+      actions.setPermissions(userPermissions);
+    }
+  }, [userPermissions, permissions, actions]);
+
+  useEffect(() => {
+    if (userSelectedRowKeys !== undefined) {
+      actions.setSelectedRowKeys(userSelectedRowKeys);
+    }
+  }, [userSelectedRowKeys, actions]);
 
   const setCurrentThemeName = actions.setThemeName;
   const setCurrentLocale = actions.setLocale;
@@ -422,17 +448,9 @@ const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
     [actions, state.deleteConfirmModal]
   );
 
-  const setCursorStyle = actions.setCursorStyle;
-  const setFillDragState = useCallback(
-    (arg: FillDragState | null | ((prev: FillDragState | null) => FillDragState | null)) => {
-      if (typeof arg === 'function') {
-        actions.setFillDragState(arg(state.fillDragState));
-      } else {
-        actions.setFillDragState(arg);
-      }
-    },
-    [actions, state.fillDragState]
-  );
+  // Local mouse states for 60fps canvas performance without global context thrashing
+  const [cursorStyle, setCursorStyle] = useState<string>('cell');
+  const [fillDragState, setFillDragState] = useState<FillDragState | null>(null);
   const showToast = actions.showToast;
 
   // 4b. Geometry & Layout Hook
@@ -3850,7 +3868,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((props, ref) => {
     let savedFilters: Record<string, ColumnFilterState> | undefined = undefined;
     if (props.storageKey) {
       try {
-        const raw = localStorage.getItem(sheetgl_state_v1_);
+        const raw = localStorage.getItem('sheetgl_state_v1_' + props.storageKey);
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed.sortRules)) savedSortRules = parsed.sortRules;
@@ -3899,6 +3917,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((props, ref) => {
     <GridProvider
       store={store}
       initialState={initialState}
+      theme={props.theme}
+      locale={props.locale}
+      permissions={props.permissions}
+      selectedRowKeys={props.selectedRowKeys}
       onColumnFiltersChange={(filters) => {
         props.onFilterChange?.(compileColumnFilters(filters), filters);
       }}

@@ -1,9 +1,11 @@
 import React, { useEffect } from 'react';
 import { ColumnDef } from '../types/grid';
 import { IGridThemeTokens } from '../theme/IGridTheme';
+import { ThemeEngine } from '../theme/ThemeEngine';
 import { IGridLocale } from '../i18n/IGridLocale';
+import { LocaleEngine } from '../i18n/LocaleEngine';
 
-import { useGridState } from '../state';
+import { useOptionalGridState } from '../state';
 
 export interface PdfPreviewModalState {
   url: string;
@@ -25,9 +27,9 @@ export const PdfPreviewModalOverlay: React.FC<PdfPreviewModalOverlayProps> = ({
   locale: propLocale,
   onClose,
 }) => {
-  const gridState = useGridState();
-  const theme = propTheme ?? gridState.resolvedTheme;
-  const locale = propLocale ?? gridState.currentLocale;
+  const gridState = useOptionalGridState();
+  const theme = propTheme ?? gridState?.resolvedTheme ?? ThemeEngine.resolve('apple-dark');
+  const locale = propLocale ?? gridState?.currentLocale ?? LocaleEngine.resolve('auto');
   const isTR = locale.code.startsWith('tr');
   const fileName = modal.url.split('/').pop() || modal.title || 'document.pdf';
 

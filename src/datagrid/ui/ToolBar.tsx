@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { IGridThemeTokens } from '../theme/IGridTheme';
-import { ThemeInput } from '../theme/ThemeEngine';
+import { ThemeEngine, ThemeInput } from '../theme/ThemeEngine';
+import { LocaleEngine } from '../i18n/LocaleEngine';
 import {
   ColumnDef,
   GridPermissions,
@@ -16,7 +17,7 @@ import { SheetGLLogo } from './SheetGLLogo';
 import { MaterialIcon } from './MaterialIcon';
 import { SHEETGL_VERSION } from '../version';
 
-import { useGridState, useGridActions } from '../state';
+import { useOptionalGridState, useOptionalGridActions, defaultPermissions } from '../state';
 
 export interface ToolBarProps {
   theme?: IGridThemeTokens;
@@ -99,29 +100,35 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   summaryConfig: propSummaryConfig,
   onUpdateSummaryConfig: propOnUpdateSummaryConfig,
 }) => {
-  const gridState = useGridState();
-  const gridActions = useGridActions();
+  const gridState = useOptionalGridState();
+  const gridActions = useOptionalGridActions();
 
-  const theme = propTheme ?? gridState.resolvedTheme;
-  const locale = propLocale ?? gridState.currentLocale;
-  const currentThemeName = propCurrentThemeName ?? (typeof gridState.currentThemeName === 'string' ? gridState.currentThemeName : 'custom');
-  const searchKeyword = propSearchKeyword ?? gridState.searchKeyword;
-  const onSearchChange = propOnSearchChange ?? ((kw: string) => gridActions.setSearchKeyword(kw));
-  const groups = propGroups ?? gridState.groups.map((g) => g.selector);
-  const onToggleGroupColumn = propOnToggleGroupColumn ?? ((colId: string) => gridActions.toggleGroup(colId));
-  const permissions = propPermissions ?? gridState.permissions;
-  const onPermissionsChange = propOnPermissionsChange ?? ((p: GridPermissions) => gridActions.setPermissions(p));
-  const selectedRowCount = propSelectedRowCount ?? gridState.selectedRowKeys.size;
-  const selectionMode = propSelectionMode ?? gridState.rowSelectionMode;
-  const onSelectionModeChange = propOnSelectionModeChange ?? ((m: RowSelectionMode) => gridActions.setRowSelectionMode(m));
-  const activeFilterCount = propActiveFilterCount ?? Object.keys(gridState.columnFilters).length;
-  const onClearAllFilters = propOnClearAllFilters ?? (() => gridActions.clearAllFilters());
-  const toolbarConfig = propToolbarConfig ?? gridState.toolbarConfig;
-  const onUpdateToolbarConfig = propOnUpdateToolbarConfig ?? ((patch: Partial<GridToolbarConfig>) => gridActions.updateToolbarConfig(patch));
-  const summaryConfig = propSummaryConfig ?? gridState.summaryConfig;
-  const onUpdateSummaryConfig = propOnUpdateSummaryConfig ?? ((patch: Partial<GridSummaryConfig>) => gridActions.updateSummaryConfig(patch));
-  const onInspectBatchChanges = propOnInspectBatchChanges ?? (() => gridActions.setShowBatchModal(true));
-  const onThemeChange = propOnThemeChange ?? ((t: ThemeInput) => gridActions.setThemeName(t));
+  const theme = propTheme ?? gridState?.resolvedTheme ?? ThemeEngine.resolve('apple-dark');
+  const locale = propLocale ?? gridState?.currentLocale ?? LocaleEngine.resolve('auto');
+  const currentThemeName = propCurrentThemeName ?? (typeof gridState?.currentThemeName === 'string' ? gridState.currentThemeName : 'custom');
+  const searchKeyword = propSearchKeyword ?? gridState?.searchKeyword ?? '';
+  const onSearchChange = propOnSearchChange ?? ((kw: string) => gridActions?.setSearchKeyword(kw));
+  const groups = propGroups ?? (gridState ? gridState.groups.map((g) => g.selector) : []);
+  const onToggleGroupColumn = propOnToggleGroupColumn ?? ((colId: string) => gridActions?.toggleGroup(colId));
+  const permissions = propPermissions ?? gridState?.permissions ?? defaultPermissions;
+  const onPermissionsChange = propOnPermissionsChange ?? ((p: GridPermissions) => gridActions?.setPermissions(p));
+  const selectedRowCount = propSelectedRowCount ?? (gridState ? gridState.selectedRowKeys.size : 0);
+  const selectionMode = propSelectionMode ?? gridState?.rowSelectionMode ?? 'none';
+  const onSelectionModeChange = propOnSelectionModeChange ?? ((m: RowSelectionMode) => gridActions?.setRowSelectionMode(m));
+  const activeFilterCount = propActiveFilterCount ?? (gridState ? Object.keys(gridState.columnFilters).length : 0);
+  const onClearAllFilters = propOnClearAllFilters ?? (() => gridActions?.clearAllFilters());
+  const toolbarConfig = propToolbarConfig ?? gridState?.toolbarConfig ?? { visible: true, buttonDisplayMode: 'icon-text' };
+  const onUpdateToolbarConfig = propOnUpdateToolbarConfig ?? ((patch: Partial<GridToolbarConfig>) => gridActions?.updateToolbarConfig(patch));
+  const summaryConfig = propSummaryConfig ?? gridState?.summaryConfig ?? {
+    visible: true,
+    showTotalCount: true,
+    showSelectionStats: true,
+    showColumnSummaries: true,
+    allowConfiguration: true,
+  };
+  const onUpdateSummaryConfig = propOnUpdateSummaryConfig ?? ((patch: Partial<GridSummaryConfig>) => gridActions?.updateSummaryConfig(patch));
+  const onInspectBatchChanges = propOnInspectBatchChanges ?? (() => gridActions?.setShowBatchModal(true));
+  const onThemeChange = propOnThemeChange ?? ((t: ThemeInput) => gridActions?.setThemeName(t));
 
   const [showColSettings, setShowColSettings] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'columns' | 'layout'>('columns');
