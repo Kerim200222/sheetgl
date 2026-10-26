@@ -1120,7 +1120,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         } else if (col.type === 'select' || col.type === 'dropdown') {
           defaultRow[col.id] = col.options?.[0]?.value ?? '';
         } else if (col.type === 'multiselect') {
-          defaultRow[col.id] = col.options?.slice(0, 2).map((o) => o.value) ?? [];
+          defaultRow[col.id] = (col as any).defaultValue ?? '';
         } else if (col.type === 'date') {
           defaultRow[col.id] = new Date().toISOString().split('T')[0];
         } else if (col.type === 'datetime') {

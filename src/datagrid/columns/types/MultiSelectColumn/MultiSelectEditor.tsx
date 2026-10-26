@@ -35,8 +35,9 @@ export const MultiSelectEditor: React.FC<CellEditorProps<string[] | string>> = (
   }, []);
 
   const commitValue = (items: string[], moveDir: 'none' | 'down' | 'left' | 'right') => {
-    const sep = (column as any).separator || ',';
-    const finalVal = Array.isArray(value) ? items : items.join(sep);
+    const sep = (column as any).separator || ', ';
+    const cleanItems = items.map((s) => String(s).trim().replace(/^["'\s]+|["'\s]+$/g, '')).filter(Boolean);
+    const finalVal = Array.isArray(value) && (column as any).saveAsArray ? cleanItems : cleanItems.join(sep);
     onCommit(finalVal, moveDir);
   };
 

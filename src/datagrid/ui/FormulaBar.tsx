@@ -4,6 +4,8 @@ import { ColumnDef, ToolbarButtonDisplayMode } from '../types/grid';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { MaterialIcon } from './MaterialIcon';
 import { FilterEngine } from '../core/FilterEngine';
+import { normalizeMultiValue } from '../columns/types/MultiSelectColumn/MultiSelectPainter';
+
 
 export interface FormulaBarProps {
   activeCoords: { row: number; col: number };
@@ -269,12 +271,7 @@ const FormulaBarMultiSelect: React.FC<{
   const separator = (column as any)?.separator || ', ';
 
   const selectedList = useMemo<string[]>(() => {
-    if (!currentValue) return [];
-    if (Array.isArray(currentValue)) return currentValue.map(String).filter(Boolean);
-    return String(currentValue)
-      .split(/[,;|]|\s\+\s/)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    return normalizeMultiValue(currentValue);
   }, [currentValue]);
 
   const handleToggleOption = (valStr: string) => {
@@ -284,14 +281,14 @@ const FormulaBarMultiSelect: React.FC<{
     } else {
       next = [...selectedList, valStr];
     }
-    const finalVal = Array.isArray(currentValue) ? next : next.join(separator);
+    const finalVal = Array.isArray(currentValue) && (column as any)?.saveAsArray ? next : next.join(separator);
     onCommitValue(finalVal);
   };
 
   const handleRemoveTag = (e: React.MouseEvent, valStr: string) => {
     e.stopPropagation();
     const next = selectedList.filter((v) => v !== valStr);
-    const finalVal = Array.isArray(currentValue) ? next : next.join(separator);
+    const finalVal = Array.isArray(currentValue) && (column as any)?.saveAsArray ? next : next.join(separator);
     onCommitValue(finalVal);
   };
 

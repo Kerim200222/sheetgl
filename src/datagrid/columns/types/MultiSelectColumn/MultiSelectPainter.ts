@@ -26,17 +26,57 @@ function resolveTagColors(opt: SelectOption, isDark: boolean): { bg: string; fg:
 }
 
 export function normalizeMultiValue(value: any): string[] {
-  if (!value) return [];
+  if (value === null || value === undefined || value === '') return [];
   if (Array.isArray(value)) {
-    return value.map((v) => String(v).trim()).filter(Boolean);
+    const result: string[] = [];
+    for (const v of value) {
+      if (v === null || v === undefined) continue;
+      if (Array.isArray(v) || typeof v === 'string') {
+        result.push(...normalizeMultiValue(v));
+      } else {
+        const s = String(v).trim();
+        if (s) result.push(s);
+      }
+    }
+    return Array.from(new Set(result.filter(Boolean)));
   }
   if (typeof value === 'string') {
-    return value
-      .split(/[,;|]|\s\+\s/)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    let str = value.trim();
+    if (!str) return [];
+
+    // 1. Recursive JSON parse if wrapped in array brackets e.g. ["A", "B"] or "[\"A\", \"B\"]"
+    while (
+      (str.startsWith('[') && str.endsWith(']')) ||
+      (str.startsWith('"[') && str.endsWith(']"'))
+    ) {
+      try {
+        const parsed = JSON.parse(str);
+        if (Array.isArray(parsed)) {
+          return normalizeMultiValue(parsed);
+        }
+        if (typeof parsed === 'string') {
+          str = parsed.trim();
+          continue;
+        }
+        break;
+      } catch {
+        // Fallback: strip outer brackets and quotes
+        str = str.replace(/^\[+\s*|\]+\s*$/g, '').trim();
+        break;
+      }
+    }
+
+    // 2. Split by comma, semicolon, pipe, or ' + '
+    return Array.from(
+      new Set(
+        str
+          .split(/[,;|]|\s\+\s/)
+          .map((s) => s.replace(/^["'\s]+|["'\s]+$/g, '').trim())
+          .filter((s) => s.length > 0 && s !== 'null' && s !== 'undefined')
+      )
+    );
   }
-  return [String(value)];
+  return [String(value).trim()].filter(Boolean);
 }
 
 export function paintMultiSelect({
