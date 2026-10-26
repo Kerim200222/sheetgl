@@ -73,14 +73,18 @@ export function useGridGeometry({
   onColumnResize,
 }: UseGridGeometryOptions): UseGridGeometryReturn {
 
-  // 1. Column state synced with props
+  // 1. Column state synced with props synchronously during render
   const [columns, setColumns] = useState<ColumnDef[]>(userColumns);
-  useEffect(() => {
+  const [prevUserColumns, setPrevUserColumns] = useState<ColumnDef[]>(userColumns);
+
+  if (prevUserColumns !== userColumns) {
+    setPrevUserColumns(userColumns);
     setColumns(userColumns);
-  }, [userColumns]);
+  }
 
   // Derived effective columns with checkbox selection column when selectionMode is active
   const effectiveColumns = useMemo<ColumnDef[]>(() => {
+    const activeCols = prevUserColumns !== userColumns ? userColumns : columns;
     if (rowSelectionMode === 'single' || rowSelectionMode === 'multiple') {
       const selCol: ColumnDef = {
         id: '__selection__',
@@ -93,21 +97,23 @@ export function useGridGeometry({
         groupable: false,
         readonly: true,
       };
-      return [selCol, ...columns.filter((c) => c.id !== '__selection__')];
+      return [selCol, ...activeCols.filter((c) => c.id !== '__selection__')];
     }
-    return columns;
-  }, [columns, rowSelectionMode]);
+    return activeCols;
+  }, [columns, userColumns, prevUserColumns, rowSelectionMode]);
 
   // 2. Geometry Engine reference
   const geometryRef = useRef<GeometryEngine>(
     new GeometryEngine(effectiveColumns, rowHeight, headerHeight, columnGroups, groupHeaderHeight)
   );
 
+  // Synchronously update geometry during render so canvas and summary row always have up-to-date column bounds
+  geometryRef.current.rowHeight = rowHeight;
+  geometryRef.current.setBaseHeaderHeight(headerHeight);
+  geometryRef.current.setColumnGroups(columnGroups, groupHeaderHeight);
+  geometryRef.current.setColumns(effectiveColumns);
+
   useEffect(() => {
-    geometryRef.current.rowHeight = rowHeight;
-    geometryRef.current.setBaseHeaderHeight(headerHeight);
-    geometryRef.current.setColumnGroups(columnGroups, groupHeaderHeight);
-    geometryRef.current.setColumns(effectiveColumns);
     onRequestRender?.();
   }, [effectiveColumns, rowHeight, headerHeight, columnGroups, groupHeaderHeight, onRequestRender]);
 

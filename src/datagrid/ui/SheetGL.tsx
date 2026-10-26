@@ -713,9 +713,11 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       }
 
       if (onEditingStart && !silent) {
+        const keyField = (store as any).getKeyField?.() || (store as any).keyField || 'id';
+        const rowKey = row[keyField] ?? row.id ?? row.legacy_id ?? rowIndex;
         const evt: EditingStartEvent = {
           row,
-          rowKey: row.id ?? rowIndex,
+          rowKey,
           rowIndex,
           column: colDef,
           value: row[colDef.id],
@@ -752,7 +754,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       if (!vRow || vRow.type !== 'data') return false;
 
       const rowData = vRow.data;
-      const rowKey = rowData.id ?? rowIndex;
+      const keyField = (store as any).getKeyField?.() || (store as any).keyField || 'id';
+      const rowKey = rowData[keyField] ?? rowData.id ?? rowData.legacy_id ?? rowIndex;
       const oldValue = rowData[colDef.id];
 
       if (oldValue === newValue) {
