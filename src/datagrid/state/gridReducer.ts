@@ -23,6 +23,7 @@ export interface DeleteConfirmModalState {
 export interface ToastMessageState {
   text: string;
   type: 'info' | 'warning' | 'success';
+  durationMs?: number;
 }
 
 export interface FillDragState {
@@ -57,8 +58,6 @@ export interface GridUIState {
 
   // Feedback & Interactive States
   toastMessage: ToastMessageState | null;
-  cursorStyle: string;
-  fillDragState: FillDragState | null;
 
   // Configuration & Theme Tokens
   currentThemeName: ThemeInput;
@@ -105,8 +104,6 @@ export type GridAction =
   // Feedback & Interactions
   | { type: 'SHOW_TOAST'; payload: ToastMessageState }
   | { type: 'HIDE_TOAST' }
-  | { type: 'SET_CURSOR_STYLE'; payload: string }
-  | { type: 'SET_FILL_DRAG_STATE'; payload: FillDragState | null }
   // Theme & Locale
   | { type: 'SET_THEME_NAME'; payload: ThemeInput }
   | { type: 'SET_RESOLVED_THEME'; payload: IGridThemeTokens }
@@ -159,8 +156,6 @@ export function createInitialGridState(initial?: Partial<GridUIState>): GridUISt
     deleteConfirmModal: null,
 
     toastMessage: null,
-    cursorStyle: 'cell',
-    fillDragState: null,
 
     currentThemeName: themeInput,
     resolvedTheme: resolved,
@@ -298,12 +293,6 @@ export function gridReducer(state: GridUIState, action: GridAction): GridUIState
 
     case 'HIDE_TOAST':
       return { ...state, toastMessage: null };
-
-    case 'SET_CURSOR_STYLE':
-      return state.cursorStyle === action.payload ? state : { ...state, cursorStyle: action.payload };
-
-    case 'SET_FILL_DRAG_STATE':
-      return { ...state, fillDragState: action.payload };
 
     case 'SET_THEME_NAME': {
       const resolved = ThemeEngine.resolve(action.payload);

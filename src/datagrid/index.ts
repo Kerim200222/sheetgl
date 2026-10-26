@@ -1,4 +1,5 @@
 export { SheetGL } from './ui/SheetGL';
+export { SHEETGL_VERSION } from './version';
 export type { SheetGLProps } from './ui/SheetGL';
 export { RowDetailDrawer } from './overlays/RowDetailDrawer';
 export type { MasterDetailConfig, RowDetailPanelProps, RowDetailDrawerProps } from './overlays/RowDetailDrawer';
