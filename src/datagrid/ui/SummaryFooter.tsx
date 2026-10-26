@@ -68,7 +68,24 @@ const SummaryCell: React.FC<SummaryCellProps> = ({
   const cellRef = useRef<HTMLDivElement>(null);
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
 
-  const hasSummary = val !== undefined && summaryType && summaryType !== 'none';
+  // Safely normalize summaryType into a valid lowercase string
+  const normalizedType = useMemo<SummaryType | undefined>(() => {
+    const raw = summaryType as any;
+    if (!raw) return undefined;
+    if (typeof raw === 'string') return raw.toLowerCase() as SummaryType;
+    if (typeof raw === 'object' && raw !== null) {
+      const candidate = raw.summaryType || raw.type || raw.name;
+      if (typeof candidate === 'string') return candidate.toLowerCase() as SummaryType;
+    }
+    return undefined;
+  }, [summaryType]);
+
+  const effectiveSummaryType =
+    normalizedType ||
+    (typeof col.summaryType === 'string' ? (col.summaryType.toLowerCase() as SummaryType) : undefined);
+
+  const summaryTypeStr = effectiveSummaryType || '';
+  const hasSummary = val !== undefined && summaryTypeStr !== '' && summaryTypeStr !== 'none';
   const isNumeric =
     col.type === 'number' ||
     col.type === 'currency' ||
@@ -113,7 +130,9 @@ const SummaryCell: React.FC<SummaryCellProps> = ({
     return <div ref={cellRef} style={{ width: '100%', height: '100%' }} />;
   }
 
-  const formattedVal = hasSummary ? formatSummaryVal(col.id, val!, summaryType!) : '';
+  const formattedVal = hasSummary
+    ? formatSummaryVal(col.id, val!, (effectiveSummaryType as SummaryType) || 'sum')
+    : '';
 
   return (
     <div
@@ -145,7 +164,7 @@ const SummaryCell: React.FC<SummaryCellProps> = ({
       }}
       title={
         hasSummary
-          ? `${col.title || col.id}: ${summaryType!.toUpperCase()} = ${formattedVal} (${
+          ? `${col.title || col.id}: ${summaryTypeStr.toUpperCase()} = ${formattedVal} (${
               isTR ? 'Değiştirmek için tıkla' : 'Click to change'
             })`
           : allowConfiguration
@@ -172,7 +191,7 @@ const SummaryCell: React.FC<SummaryCellProps> = ({
               flexShrink: 0,
             }}
           >
-            {summaryType!.toUpperCase()}
+            {summaryTypeStr.toUpperCase()}
           </span>
 
           {/* Formatted Number */}
@@ -269,7 +288,7 @@ const SummaryCell: React.FC<SummaryCellProps> = ({
           </div>
 
           {(['sum', 'avg', 'min', 'max', 'count', 'none'] as SummaryType[]).map((t) => {
-            const isSelected = (summaryType || 'none') === t;
+            const isSelected = (effectiveSummaryType || 'none') === t;
             return (
               <button
                 key={t}
@@ -643,7 +662,8 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
                   col={col}
                   val={summaries?.[col.id]}
                   summaryType={
-                    summaryTypes[col.id] ||
+                    (summaryTypes && summaryTypes[col.id]) ||
+                    col.summaryType ||
                     summaryConfig?.items?.find((i) => i.columnId === col.id)?.summaryType
                   }
                   allowConfiguration={allowConfiguration}
@@ -694,7 +714,8 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
                     col={col}
                     val={summaries?.[col.id]}
                     summaryType={
-                      summaryTypes[col.id] ||
+                      (summaryTypes && summaryTypes[col.id]) ||
+                      col.summaryType ||
                       summaryConfig?.items?.find((i) => i.columnId === col.id)?.summaryType
                     }
                     allowConfiguration={allowConfiguration}
@@ -738,7 +759,8 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
                     col={col}
                     val={summaries?.[col.id]}
                     summaryType={
-                      summaryTypes[col.id] ||
+                      (summaryTypes && summaryTypes[col.id]) ||
+                      col.summaryType ||
                       summaryConfig?.items?.find((i) => i.columnId === col.id)?.summaryType
                     }
                     allowConfiguration={allowConfiguration}
@@ -894,7 +916,12 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
           {columns
             .filter((c) => c.type !== 'sparkline' && c.type !== 'action' && c.id !== '__selection__')
             .map((col) => {
-              const cur = summaryTypes[col.id] || 'none';
+              const rawCur = (summaryTypes && summaryTypes[col.id]) || col.summaryType;
+              const cur = typeof rawCur === 'string'
+                ? rawCur.toLowerCase()
+                : (typeof rawCur === 'object' && rawCur !== null
+                    ? String((rawCur as any).summaryType || (rawCur as any).type || 'none').toLowerCase()
+                    : 'none');
               return (
                 <div
                   key={col.id}
