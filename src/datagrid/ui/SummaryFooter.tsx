@@ -6,6 +6,8 @@ import { IGridLocale } from '../i18n/IGridLocale';
 import { MaterialIcon } from './MaterialIcon';
 import { GeometryEngine } from '../core/GeometryEngine';
 
+import { useGridState, useGridActions } from '../state';
+
 export interface SelectionSummaryStats {
   count: number;
   numericCount: number;
@@ -23,8 +25,8 @@ export interface SummaryFooterProps {
   onUpdateSummaryConfig?: (patch: Partial<GridSummaryConfig>) => void;
   selectionStats?: SelectionSummaryStats | null;
   columns: ColumnDef[];
-  theme: IGridThemeTokens;
-  locale: IGridLocale;
+  theme?: IGridThemeTokens;
+  locale?: IGridLocale;
   totalRowCount: number;
   unfilteredRowCount?: number;
   geometry?: GeometryEngine;
@@ -356,17 +358,25 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
   summaries,
   summaryTypes = {},
   onChangeSummaryType,
-  summaryConfig,
-  onUpdateSummaryConfig,
+  summaryConfig: propSummaryConfig,
+  onUpdateSummaryConfig: propOnUpdateSummaryConfig,
   selectionStats,
   columns,
-  theme,
-  locale,
+  theme: propTheme,
+  locale: propLocale,
   totalRowCount,
   unfilteredRowCount,
   geometry,
   scrollContainerRef,
 }) => {
+  const gridState = useGridState();
+  const gridActions = useGridActions();
+
+  const theme = propTheme ?? gridState.resolvedTheme;
+  const locale = propLocale ?? gridState.currentLocale;
+  const summaryConfig = propSummaryConfig ?? gridState.summaryConfig;
+  const onUpdateSummaryConfig = propOnUpdateSummaryConfig ?? ((patch: Partial<GridSummaryConfig>) => gridActions.updateSummaryConfig(patch));
+
   const [showAddSummary, setShowAddSummary] = useState<boolean>(false);
   const summaryScrollRef = useRef<HTMLDivElement>(null);
   const isTR = locale.code.startsWith('tr');
