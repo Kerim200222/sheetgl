@@ -96,6 +96,8 @@ export interface SheetGLProps {
   /** Callback fired when a column is interactively resized */
   onColumnResize?: (columnId: string, newWidth: number) => void;
 
+  /** Navigation direction when Enter key commits cell edit: 'down' | 'right' | 'auto' (default: 'auto' which moves right on inserted rows and down on existing rows) */
+  enterNavigation?: 'down' | 'right' | 'auto';
   // Enterprise Lifecycle Event Triggers
   onEditingStart?: (e: EditingStartEvent) => void;
   onCellValueChanging?: (e: CellValueChangingEvent) => void;
@@ -174,6 +176,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     summaryRow: userSummaryRow,
     onSummaryConfigChange,
     showFormulaBar = true,
+    enterNavigation = 'auto',
     selectionMode: userSelectionMode = 'none',
     onSelectionModeChange,
     selectedRowKeys: userSelectedRowKeys,
@@ -3334,10 +3337,58 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               if (ok) {
                 setEditorValidationError(null);
                 setActiveOverlay(null);
-                if (moveDir === 'down') moveSelection(1, 0);
-                else if (moveDir === 'right') moveSelection(0, 1);
-                else if (moveDir === 'left') moveSelection(0, -1);
-                else requestRender();
+
+                const vRow = store.getViewRow(targetRow);
+                const rowData = vRow && vRow.type === 'data' ? vRow.data : undefined;
+                const rowKey = rowData ? (rowData[(store as any).keyField ?? 'id'] ?? rowData.id) : undefined;
+                const isInserted = (store as any).isRowInserted
+                  ? (store as any).isRowInserted(rowKey)
+                  : Boolean(rowData?.__isNew || String(rowKey ?? '').startsWith('new_'));
+
+                let effectiveDir = moveDir;
+                if (moveDir === 'down') {
+                  if (enterNavigation === 'right' || (enterNavigation === 'auto' && isInserted)) {
+                    effectiveDir = 'right';
+                  }
+                }
+
+                if (effectiveDir === 'down') {
+                  moveSelection(1, 0);
+                } else if (effectiveDir === 'right') {
+                  const geom = geometryRef.current;
+                  let nextCol = activeOverlay.col + 1;
+                  while (
+                    nextCol < geom.columns.length &&
+                    rowData &&
+                    !canEditCell(rowData, geom.columns[nextCol], targetRow, true)
+                  ) {
+                    nextCol++;
+                  }
+                  if (nextCol < geom.columns.length) {
+                    const dCol = nextCol - activeOverlay.col;
+                    moveSelection(0, dCol);
+                  } else {
+                    moveSelection(0, 1);
+                  }
+                } else if (effectiveDir === 'left') {
+                  const geom = geometryRef.current;
+                  let prevCol = activeOverlay.col - 1;
+                  while (
+                    prevCol >= 0 &&
+                    rowData &&
+                    !canEditCell(rowData, geom.columns[prevCol], targetRow, true)
+                  ) {
+                    prevCol--;
+                  }
+                  if (prevCol >= 0) {
+                    const dCol = prevCol - activeOverlay.col;
+                    moveSelection(0, dCol);
+                  } else {
+                    moveSelection(0, -1);
+                  }
+                } else {
+                  requestRender();
+                }
                 containerRef.current?.focus();
               } else {
                 // Keep editor open with user's attempted value so they can fix the validation error or press Escape
