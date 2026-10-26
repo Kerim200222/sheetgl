@@ -110,6 +110,8 @@ export interface SheetGLProps {
   onRowRemoved?: (e: RowRemovedEvent) => void;
   onSaving?: (e: SavingEvent) => void | Promise<void>;
   onSaved?: (e: SavedEvent) => void;
+  onAddNewRow?: () => void;
+  onRefresh?: () => void;
 
   style?: React.CSSProperties;
   className?: string;
@@ -190,6 +192,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onRowRemoved,
     onSaving,
     onSaved,
+    onAddNewRow,
+    onRefresh,
     remoteOperations,
     onFilterChange,
     onColumnResize,
@@ -2719,17 +2723,27 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     const colDef = geometryRef.current.columns[col];
     const vRow = store.getViewRow(row);
 
-    // Excel Shortcuts with Ctrl / Meta
+    // Excel & Web Shortcuts with Ctrl / Meta
     if (e.ctrlKey || e.metaKey) {
       const k = e.key.toLowerCase();
+      if (k === 's') {
+        e.preventDefault();
+        handleSaveBatch();
+        return;
+      }
+      if (k === 'n') {
+        e.preventDefault();
+        onAddNewRow?.();
+        return;
+      }
       if (k === 'd') {
         e.preventDefault();
         handleDuplicateCellDown();
         return;
       }
-      if (k === 'r') {
-        e.preventDefault();
-        handleDuplicateCellRight();
+      // Note: Never hijack Ctrl+R / Ctrl+F5 for cell duplication; allow browser reload
+      if (k === 'r' || k === 'f5') {
+        onRefresh?.();
         return;
       }
       if (k === 'z') {
@@ -2760,6 +2774,19 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         }
         return;
       }
+    }
+
+    // F5 / Refresh Key
+    if (e.key === 'F5') {
+      onRefresh?.();
+      return;
+    }
+
+    // Alt+R for Duplicate Cell Right (keeps Ctrl+R clean for browser reload)
+    if (e.altKey && (e.key === 'r' || e.key === 'R')) {
+      e.preventDefault();
+      handleDuplicateCellRight();
+      return;
     }
 
     // Shift+D for Row Duplication

@@ -335,7 +335,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
                 type="button"
                 disabled={!canDuplicate || !isEditable}
                 onClick={onDuplicateRight}
-                title={isTR ? 'Hücreyi Sağa Çoğalt (Ctrl+R)' : 'Duplicate Cell Right (Ctrl+R)'}
+                title={isTR ? 'Hücreyi Sağa Çoğalt (Alt+R)' : 'Duplicate Cell Right (Alt+R)'}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
