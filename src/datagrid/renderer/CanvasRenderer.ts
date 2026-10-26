@@ -510,7 +510,7 @@ export class CanvasRenderer {
     selectedRowKeys?: Set<any>,
     colStyle?: ResolvedColumnStyle
   ): void {
-    const cellVal = rowData[col.id];
+    const cellVal = typeof rowData[col.id] === 'function' ? undefined : rowData[col.id];
     const isHovered = hoveredCell?.row === rowIndex && hoveredCell?.col === colIdx;
     const isRowSelectedByCheck = selectedRowKeys?.has(rowKey) ?? false;
     const isReadonly =
@@ -1150,7 +1150,8 @@ export class CanvasRenderer {
     ctx.textBaseline = 'middle';
 
     const prefix = isReadonly && col.type !== 'action' && col.type !== 'sparkline' ? '🔒 ' : '';
-    ctx.fillText(`${prefix}${col.title}`, x + 8, y + h / 2);
+    const safeTitle = typeof col.title === 'string' && col.title.trim() !== '' ? col.title : (col.id === 'constructor' ? 'Constructor' : String(col.id || ''));
+    ctx.fillText(`${prefix}${safeTitle}`, x + 8, y + h / 2);
     ctx.restore();
 
     // Sort Arrow

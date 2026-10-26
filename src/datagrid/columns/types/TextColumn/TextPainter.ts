@@ -1,7 +1,7 @@
 import { CellPaintContext } from '../../IColumnTypePlugin';
 
 export function paintText({ ctx, value, theme, x, y, width, height }: CellPaintContext<string>): void {
-  if (value === null || value === undefined || value === '') return;
+  if (value === null || value === undefined || value === '' || typeof value === 'function') return;
 
   const padX = 10;
   const maxW = width - padX * 2;
