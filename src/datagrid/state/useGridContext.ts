@@ -24,6 +24,7 @@ export function useGridContext(): GridContextValue {
 /**
  * Access only the Grid UI state.
  * Subscribes only to changes in GridStateContext.
+ * Throws an error if used outside <GridProvider>.
  */
 export function useGridState(): GridUIState {
   const state = useContext(GridStateContext);
@@ -31,6 +32,22 @@ export function useGridState(): GridUIState {
     throw new Error('useGridState must be used within a <GridProvider>');
   }
   return state;
+}
+
+/**
+ * Safely access the Grid UI state if inside a <GridProvider>, or return null if used standalone.
+ * Does NOT throw an error when used outside a <GridProvider>.
+ */
+export function useOptionalGridState(): GridUIState | null {
+  return useContext(GridStateContext);
+}
+
+/**
+ * Safely access the Grid actions if inside a <GridProvider>, or return null if used standalone.
+ * Does NOT throw an error when used outside a <GridProvider>.
+ */
+export function useOptionalGridActions(): GridActions | null {
+  return useContext(GridActionsContext);
 }
 
 /**
@@ -55,12 +72,4 @@ export function useGridActions(): GridActions {
     throw new Error('useGridActions must be used within a <GridProvider>');
   }
   return actions;
-}
-
-/**
- * Selective state selector hook to minimize re-renders.
- */
-export function useGridSelector<T>(selector: (state: GridUIState) => T): T {
-  const state = useGridState();
-  return selector(state);
 }

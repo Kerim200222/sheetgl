@@ -1,4 +1,11 @@
-import React, { createContext, useReducer, useMemo, ReactNode, useEffect, useCallback } from 'react';
+import React, {
+  createContext,
+  useReducer,
+  useMemo,
+  ReactNode,
+  useEffect,
+  useRef,
+} from 'react';
 import {
   GridUIState,
   GridAction,
@@ -7,15 +14,21 @@ import {
   HeaderFilterPopoverState,
   DeleteConfirmModalState,
   ToastMessageState,
-  FillDragState,
 } from './gridReducer';
 import { IDataStore } from '../types/store';
 import { SortDescriptor, ColumnFilterState } from '../types/filter';
 import { GroupDescriptor } from '../types/group';
-import { ActiveOverlayState, GridToolbarConfig, GridSummaryConfig, RowSelectionMode, GridPermissions } from '../types/grid';
-import { ThemeInput } from '../theme/ThemeEngine';
+import {
+  ActiveOverlayState,
+  GridToolbarConfig,
+  GridSummaryConfig,
+  RowSelectionMode,
+  GridPermissions,
+} from '../types/grid';
+import { ThemeEngine, ThemeInput } from '../theme/ThemeEngine';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
+import { LocaleEngine, LocaleInput } from '../i18n/LocaleEngine';
 import { ContextMenuState } from '../overlays/ContextMenuOverlay';
 import { SparklineModalState } from '../overlays/SparklineModalOverlay';
 import { PdfPreviewModalState } from '../overlays/PdfPreviewModalOverlay';
@@ -51,8 +64,6 @@ export interface GridActions {
   // Feedback & Interactions
   showToast: (text: string, type?: 'info' | 'warning' | 'success', durationMs?: number) => void;
   hideToast: () => void;
-  setCursorStyle: (style: string) => void;
-  setFillDragState: (state: FillDragState | null) => void;
 
   // Theme & Locale
   setThemeName: (name: ThemeInput) => void;
@@ -91,6 +102,10 @@ export interface GridProviderProps {
   children: ReactNode;
   initialState?: Partial<GridUIState>;
   store?: IDataStore;
+  theme?: ThemeInput;
+  locale?: LocaleInput;
+  permissions?: GridPermissions;
+  selectedRowKeys?: any[] | Set<any>;
   onSortRulesChange?: (sortRules: SortDescriptor[]) => void;
   onColumnFiltersChange?: (filters: Record<string, ColumnFilterState>) => void;
   onThemeChange?: (themeName: ThemeInput) => void;
@@ -103,6 +118,10 @@ export const GridProvider: React.FC<GridProviderProps> = ({
   children,
   initialState,
   store,
+  theme,
+  locale,
+  permissions,
+  selectedRowKeys,
   onSortRulesChange,
   onColumnFiltersChange,
   onThemeChange,
@@ -116,35 +135,117 @@ export const GridProvider: React.FC<GridProviderProps> = ({
     createInitialGridState
   );
 
-  // Sync state changes to external parent callbacks if provided
+  // Stabilize external callbacks with refs to eliminate infinite update loops
+  const onSortRulesChangeRef = useRef(onSortRulesChange);
+  onSortRulesChangeRef.current = onSortRulesChange;
+
+  const onColumnFiltersChangeRef = useRef(onColumnFiltersChange);
+  onColumnFiltersChangeRef.current = onColumnFiltersChange;
+
+  const onThemeChangeRef = useRef(onThemeChange);
+  onThemeChangeRef.current = onThemeChange;
+
+  const onLocaleChangeRef = useRef(onLocaleChange);
+  onLocaleChangeRef.current = onLocaleChange;
+
+  const onPermissionsChangeRef = useRef(onPermissionsChange);
+  onPermissionsChangeRef.current = onPermissionsChange;
+
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+
+  // First render guard to avoid firing callbacks on mount
+  const isFirstRender = useRef(true);
   useEffect(() => {
-    onSortRulesChange?.(state.sortRules);
-  }, [state.sortRules, onSortRulesChange]);
+    isFirstRender.current = false;
+  }, []);
+
+  // Sync state changes to external parent callbacks (guarded against first mount)
+  useEffect(() => {
+    if (isFirstRender.current) return;
+    onSortRulesChangeRef.current?.(state.sortRules);
+  }, [state.sortRules]);
 
   useEffect(() => {
-    onColumnFiltersChange?.(state.columnFilters);
-  }, [state.columnFilters, onColumnFiltersChange]);
+    if (isFirstRender.current) return;
+    onColumnFiltersChangeRef.current?.(state.columnFilters);
+  }, [state.columnFilters]);
 
   useEffect(() => {
-    onThemeChange?.(state.currentThemeName);
-  }, [state.currentThemeName, onThemeChange]);
+    if (isFirstRender.current) return;
+    onThemeChangeRef.current?.(state.currentThemeName);
+  }, [state.currentThemeName]);
 
   useEffect(() => {
-    onLocaleChange?.(state.currentLocale);
-  }, [state.currentLocale, onLocaleChange]);
+    if (isFirstRender.current) return;
+    onLocaleChangeRef.current?.(state.currentLocale);
+  }, [state.currentLocale]);
 
   useEffect(() => {
-    onPermissionsChange?.(state.permissions);
-  }, [state.permissions, onPermissionsChange]);
+    if (isFirstRender.current) return;
+    onPermissionsChangeRef.current?.(state.permissions);
+  }, [state.permissions]);
 
   useEffect(() => {
-    onSelectionChange?.(Array.from(state.selectedRowKeys));
-  }, [state.selectedRowKeys, onSelectionChange]);
+    if (isFirstRender.current) return;
+    onSelectionChangeRef.current?.(Array.from(state.selectedRowKeys));
+  }, [state.selectedRowKeys]);
+
+  // Synchronize incoming external prop changes to reducer actions
+  const prevTheme = useRef(theme);
+  useEffect(() => {
+    if (theme !== undefined && theme !== prevTheme.current) {
+      prevTheme.current = theme;
+      dispatch({ type: 'SET_THEME_NAME', payload: theme });
+    }
+  }, [theme]);
+
+  const prevLocale = useRef(locale);
+  useEffect(() => {
+    if (locale !== undefined && locale !== prevLocale.current) {
+      prevLocale.current = locale;
+      dispatch({ type: 'SET_LOCALE', payload: LocaleEngine.resolve(locale) });
+    }
+  }, [locale]);
+
+  const prevPermissions = useRef(permissions);
+  useEffect(() => {
+    if (permissions !== undefined && permissions !== prevPermissions.current) {
+      prevPermissions.current = permissions;
+      dispatch({ type: 'SET_PERMISSIONS', payload: permissions });
+    }
+  }, [permissions]);
+
+  const prevSelectedRowKeys = useRef(selectedRowKeys);
+  useEffect(() => {
+    if (selectedRowKeys !== undefined && selectedRowKeys !== prevSelectedRowKeys.current) {
+      prevSelectedRowKeys.current = selectedRowKeys;
+      dispatch({ type: 'SET_SELECTED_ROW_KEYS', payload: selectedRowKeys });
+    }
+  }, [selectedRowKeys]);
+
+  // Restore ThemeEngine.watchSystem listener when theme is set to 'system'
+  useEffect(() => {
+    if (state.currentThemeName === 'system') {
+      const unsub = ThemeEngine.watchSystem(() => {
+        dispatch({ type: 'SET_RESOLVED_THEME', payload: ThemeEngine.resolve('system') });
+      });
+      return unsub;
+    }
+  }, [state.currentThemeName]);
+
+  // Auto-dismiss Toast notifications with proper timeout cleanup to prevent memory leaks
+  useEffect(() => {
+    if (!state.toastMessage) return;
+    const duration = state.toastMessage.durationMs ?? 2600;
+    const timer = setTimeout(() => {
+      dispatch({ type: 'HIDE_TOAST' });
+    }, duration);
+    return () => clearTimeout(timer);
+  }, [state.toastMessage]);
 
   // Memoized bound actions
   const actions = useMemo<GridActions>(() => {
-    let toastTimeout: any = null;
-
     return {
       setSortRules: (rules) => dispatch({ type: 'SET_SORT_RULES', payload: rules }),
       setGroups: (groups) => dispatch({ type: 'SET_GROUPS', payload: groups }),
@@ -175,18 +276,11 @@ export const GridProvider: React.FC<GridProviderProps> = ({
       closeDeleteConfirmModal: () => dispatch({ type: 'CLOSE_DELETE_CONFIRM_MODAL' }),
 
       showToast: (text, type = 'info', durationMs = 2600) => {
-        dispatch({ type: 'SHOW_TOAST', payload: { text, type } });
-        if (toastTimeout) clearTimeout(toastTimeout);
-        toastTimeout = setTimeout(() => {
-          dispatch({ type: 'HIDE_TOAST' });
-        }, durationMs);
+        dispatch({ type: 'SHOW_TOAST', payload: { text, type, durationMs } });
       },
       hideToast: () => {
-        if (toastTimeout) clearTimeout(toastTimeout);
         dispatch({ type: 'HIDE_TOAST' });
       },
-      setCursorStyle: (style) => dispatch({ type: 'SET_CURSOR_STYLE', payload: style }),
-      setFillDragState: (fillState) => dispatch({ type: 'SET_FILL_DRAG_STATE', payload: fillState }),
 
       setThemeName: (name) => dispatch({ type: 'SET_THEME_NAME', payload: name }),
       setResolvedTheme: (tokens) => dispatch({ type: 'SET_RESOLVED_THEME', payload: tokens }),
