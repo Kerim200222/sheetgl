@@ -9,11 +9,11 @@ describe('GeometryEngine', () => {
 
   beforeEach(() => {
     sampleColumns = [
-      { id: 'col_id', field: 'id', title: 'ID', width: 60, pinned: true },
-      { id: 'col_name', field: 'name', title: 'Name', width: 120 },
-      { id: 'col_email', field: 'email', title: 'Email', width: 180 },
-      { id: 'col_age', field: 'age', title: 'Age', width: 80 },
-      { id: 'col_hidden', field: 'secret', title: 'Secret', width: 100, visible: false },
+      { id: 'col_id', title: 'ID', type: 'text', width: 60, pinned: true },
+      { id: 'col_name', title: 'Name', type: 'text', width: 120 },
+      { id: 'col_email', title: 'Email', type: 'text', width: 180 },
+      { id: 'col_age', title: 'Age', type: 'number', width: 80 },
+      { id: 'col_hidden', title: 'Secret', type: 'text', width: 100, visible: false },
     ];
     engine = new GeometryEngine(sampleColumns, 34, 38);
   });

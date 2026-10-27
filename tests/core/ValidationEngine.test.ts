@@ -30,8 +30,9 @@ describe('ValidationEngine', () => {
     it('should validate required rule', async () => {
       const column: ColumnDef = {
         id: 'name',
-        field: 'name',
         title: 'Full Name',
+        type: 'text',
+        width: 150,
         validationRules: [{ type: 'required', message: 'Name cannot be blank' }],
       };
 
@@ -49,8 +50,9 @@ describe('ValidationEngine', () => {
     it('should validate email rule', async () => {
       const column: ColumnDef = {
         id: 'email',
-        field: 'email',
         title: 'Email Address',
+        type: 'email',
+        width: 180,
         validationRules: [{ type: 'email' }],
       };
 
@@ -64,8 +66,9 @@ describe('ValidationEngine', () => {
     it('should validate numeric range rule', async () => {
       const column: ColumnDef = {
         id: 'score',
-        field: 'score',
         title: 'Score',
+        type: 'number',
+        width: 80,
         validationRules: [{ type: 'range', min: 0, max: 100, message: 'Score must be 0-100' }],
       };
 
@@ -77,8 +80,9 @@ describe('ValidationEngine', () => {
     it('should validate custom synchronous rule', async () => {
       const column: ColumnDef = {
         id: 'code',
-        field: 'code',
         title: 'Code',
+        type: 'text',
+        width: 120,
         validationRules: [
           {
             type: 'custom',
@@ -99,8 +103,9 @@ describe('ValidationEngine', () => {
     it('should validate custom asynchronous rule with Deferred', async () => {
       const column: ColumnDef = {
         id: 'sku',
-        field: 'sku',
         title: 'SKU',
+        type: 'text',
+        width: 120,
         validationRules: [
           {
             type: 'async',

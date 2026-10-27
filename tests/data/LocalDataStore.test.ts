@@ -9,6 +9,11 @@ describe('LocalDataStore', () => {
     { id: 3, name: 'Product C', category: 'Tech', price: 200, stock: 2 },
   ];
 
+  const getDataRow = (index: number) => {
+    const row = store.getViewRow(index);
+    return row && row.type === 'data' ? row.data : undefined;
+  };
+
   beforeEach(() => {
     store = new LocalDataStore({
       data: initialData,
@@ -21,7 +26,7 @@ describe('LocalDataStore', () => {
     it('should initialize and report correct row count', () => {
       expect(store.getRowCount()).toBe(3);
       expect(store.isRemote()).toBe(false);
-      expect(store.getViewRow(0)?.data.name).toBe('Product A');
+      expect(getDataRow(0)?.name).toBe('Product A');
     });
 
     it('should find raw row by key', () => {
@@ -35,8 +40,8 @@ describe('LocalDataStore', () => {
     it('should filter data rows according to FilterDescriptor', async () => {
       await store.setFilter(['category', '=', 'Tech']);
       expect(store.getRowCount()).toBe(2);
-      expect(store.getViewRow(0)?.data.name).toBe('Product A');
-      expect(store.getViewRow(1)?.data.name).toBe('Product C');
+      expect(getDataRow(0)?.name).toBe('Product A');
+      expect(getDataRow(1)?.name).toBe('Product C');
 
       // Clear filter
       await store.setFilter(null);
@@ -46,7 +51,7 @@ describe('LocalDataStore', () => {
     it('should filter rows by search keyword', async () => {
       await store.setSearch('Home');
       expect(store.getRowCount()).toBe(1);
-      expect(store.getViewRow(0)?.data.name).toBe('Product B');
+      expect(getDataRow(0)?.name).toBe('Product B');
 
       await store.setSearch('');
       expect(store.getRowCount()).toBe(3);
@@ -56,9 +61,9 @@ describe('LocalDataStore', () => {
   describe('Sorting', () => {
     it('should sort data rows ascending and descending', async () => {
       await store.setSorting([{ selector: 'price', desc: true }]);
-      expect(store.getViewRow(0)?.data.price).toBe(200);
-      expect(store.getViewRow(1)?.data.price).toBe(100);
-      expect(store.getViewRow(2)?.data.price).toBe(50);
+      expect(getDataRow(0)?.price).toBe(200);
+      expect(getDataRow(1)?.price).toBe(100);
+      expect(getDataRow(2)?.price).toBe(50);
     });
   });
 
@@ -72,9 +77,10 @@ describe('LocalDataStore', () => {
       expect(store.isCellDirty(1, 'name')).toBe(false);
 
       const changes = store.getPendingChanges();
-      expect(changes.updated.length).toBe(1);
-      expect(changes.updated[0].key).toBe(1);
-      expect(changes.updated[0].values.price).toBe(150);
+      expect(changes.updated).toBeDefined();
+      expect(changes.updated?.length).toBe(1);
+      expect(changes.updated?.[0].key).toBe(1);
+      expect(changes.updated?.[0].values.price).toBe(150);
     });
 
     it('should revert cell to original value and clear dirty state if restored', async () => {
@@ -103,7 +109,8 @@ describe('LocalDataStore', () => {
       expect(store.hasPendingChanges()).toBe(true);
 
       const saved = await store.saveBatchChanges();
-      expect(saved.updated.length).toBe(1);
+      expect(saved.updated).toBeDefined();
+      expect(saved.updated?.length).toBe(1);
       expect(store.hasPendingChanges()).toBe(false);
       expect(store.getRawRowByKey(1)?.price).toBe(999);
       expect(store.isCellDirty(1, 'price')).toBe(false);
@@ -113,12 +120,14 @@ describe('LocalDataStore', () => {
   describe('Row Insertion, Duplication and Deletion', () => {
     it('should insert new row and track in pending changes', async () => {
       const newRow = await store.insertRow({ name: 'Product D', category: 'Tech', price: 300 });
+      expect(newRow.name).toBe('Product D');
       expect(store.getRowCount()).toBe(4);
       expect(store.hasPendingChanges()).toBe(true);
 
       const changes = store.getPendingChanges();
-      expect(changes.inserted.length).toBe(1);
-      expect(changes.inserted[0].name).toBe('Product D');
+      expect(changes.inserted).toBeDefined();
+      expect(changes.inserted?.length).toBe(1);
+      expect(changes.inserted?.[0].name).toBe('Product D');
     });
 
     it('should delete row and track in pending changes', async () => {
@@ -127,8 +136,9 @@ describe('LocalDataStore', () => {
       expect(store.hasPendingChanges()).toBe(true);
 
       const changes = store.getPendingChanges();
-      expect(changes.deleted.length).toBe(1);
-      expect(changes.deleted[0]).toBe(2);
+      expect(changes.deleted).toBeDefined();
+      expect(changes.deleted?.length).toBe(1);
+      expect(changes.deleted?.[0]).toBe(2);
     });
 
     it('should duplicate row accurately', async () => {
