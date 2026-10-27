@@ -7,6 +7,7 @@ export interface HitTestResult {
   localX: number;
   localY: number;
   isFrozen: boolean;
+  pinnedZone?: 'left' | 'center' | 'right';
   cellRect: { x: number; y: number; width: number; height: number };
 }
 
@@ -19,6 +20,7 @@ export interface HeaderHitTestResult {
   isGroupHeaderHit?: boolean;
   groupDef?: ColumnGroupDef;
   groupColIndices?: number[];
+  pinnedZone?: 'left' | 'center' | 'right';
 }
 
 export class GeometryEngine {
@@ -33,11 +35,54 @@ export class GeometryEngine {
   public viewportWidth: number = typeof window !== 'undefined' ? window.innerWidth : 1200;
 
   public columns: ColumnDef[] = [];
-  public frozenColumns: ColumnDef[] = [];
-  public scrollableColumns: ColumnDef[] = [];
-  public totalFrozenWidth: number = 0;
-  public totalScrollableWidth: number = 0;
-  public scrollableColOffsets: Float32Array = new Float32Array(0);
+
+  // Dual Pinning 3-way split:
+  public leftPinnedColumns: ColumnDef[] = [];
+  public centerColumns: ColumnDef[] = [];
+  public rightPinnedColumns: ColumnDef[] = [];
+
+  public totalLeftPinnedWidth: number = 0;
+  public totalRightPinnedWidth: number = 0;
+  public totalCenterWidth: number = 0;
+
+  public centerColOffsets: Float32Array = new Float32Array(0);
+  public rightColOffsets: Float32Array = new Float32Array(0);
+
+  // Backward compatibility aliases
+  public get frozenColumns(): ColumnDef[] {
+    return this.leftPinnedColumns;
+  }
+  public set frozenColumns(cols: ColumnDef[]) {
+    this.leftPinnedColumns = cols;
+  }
+
+  public get scrollableColumns(): ColumnDef[] {
+    return this.centerColumns;
+  }
+  public set scrollableColumns(cols: ColumnDef[]) {
+    this.centerColumns = cols;
+  }
+
+  public get totalFrozenWidth(): number {
+    return this.totalLeftPinnedWidth;
+  }
+  public set totalFrozenWidth(w: number) {
+    this.totalLeftPinnedWidth = w;
+  }
+
+  public get totalScrollableWidth(): number {
+    return this.totalCenterWidth;
+  }
+  public set totalScrollableWidth(w: number) {
+    this.totalCenterWidth = w;
+  }
+
+  public get scrollableColOffsets(): Float32Array {
+    return this.centerColOffsets;
+  }
+  public set scrollableColOffsets(offsets: Float32Array) {
+    this.centerColOffsets = offsets;
+  }
 
   constructor(
     columns: ColumnDef[] = [],
@@ -142,9 +187,11 @@ export class GeometryEngine {
 
   public setColumns(columns: ColumnDef[]): void {
     const visibleCols = columns.filter((c) => c.visible !== false);
+    // Sort into 3 zones: left pinned, center unpinned, right pinned
     this.columns = [
-      ...visibleCols.filter((c) => Boolean(c.pinned)),
+      ...visibleCols.filter((c) => c.pinned === true || c.pinned === 'left'),
       ...visibleCols.filter((c) => !c.pinned),
+      ...visibleCols.filter((c) => c.pinned === 'right'),
     ];
     this.recalculateGeometry();
   }
@@ -153,53 +200,99 @@ export class GeometryEngine {
     const isMobileViewport = this.viewportWidth > 0 && this.viewportWidth < 680;
     this.rowNumberWidth = isMobileViewport ? 38 : 54;
 
+    const isLeft = (c: ColumnDef) => c.pinned === true || c.pinned === 'left';
+    const isRight = (c: ColumnDef) => c.pinned === 'right';
+
     if (isMobileViewport) {
       // On narrow mobile screens, prevent pinned columns from consuming the entire viewport width
       const maxFrozenBudget = Math.max(88, Math.floor(this.viewportWidth * 0.34));
-      const nextFrozen: ColumnDef[] = [];
-      const nextScrollable: ColumnDef[] = [];
-      let currentFrozenW = this.rowNumberWidth;
+      const nextLeft: ColumnDef[] = [];
+      const nextCenter: ColumnDef[] = [];
+      const nextRight: ColumnDef[] = [];
+      let currentLeftW = this.rowNumberWidth;
 
       for (const col of this.columns) {
-        if (
-          col.pinned &&
-          (col.id === '__selection__' || currentFrozenW + col.width <= maxFrozenBudget)
-        ) {
-          nextFrozen.push(col);
-          currentFrozenW += col.width;
+        if (isLeft(col)) {
+          if (col.id === '__selection__' || currentLeftW + col.width <= maxFrozenBudget) {
+            nextLeft.push(col);
+            currentLeftW += col.width;
+          } else {
+            nextCenter.push(col);
+          }
+        } else if (isRight(col)) {
+          // On mobile, right-pinned columns scroll with center to prevent covering the viewport
+          nextCenter.push(col);
         } else {
-          nextScrollable.push(col);
+          nextCenter.push(col);
         }
       }
-      this.frozenColumns = nextFrozen;
-      this.scrollableColumns = nextScrollable;
-      this.columns = [...nextFrozen, ...nextScrollable];
+      this.leftPinnedColumns = nextLeft;
+      this.centerColumns = nextCenter;
+      this.rightPinnedColumns = nextRight;
     } else {
-      this.frozenColumns = this.columns.filter((c) => Boolean(c.pinned));
-      this.scrollableColumns = this.columns.filter((c) => !c.pinned);
+      this.leftPinnedColumns = this.columns.filter(isLeft);
+      this.centerColumns = this.columns.filter((c) => !isLeft(c) && !isRight(c));
+      this.rightPinnedColumns = this.columns.filter(isRight);
     }
 
-    this.totalFrozenWidth =
-      this.rowNumberWidth + this.frozenColumns.reduce((sum, c) => sum + c.width, 0);
+    // Maintain ordered column list: Left -> Center -> Right
+    this.columns = [
+      ...this.leftPinnedColumns,
+      ...this.centerColumns,
+      ...this.rightPinnedColumns,
+    ];
 
-    this.scrollableColOffsets = new Float32Array(this.scrollableColumns.length + 1);
-    let acc = 0;
-    for (let i = 0; i < this.scrollableColumns.length; i++) {
-      this.scrollableColOffsets[i] = acc;
-      acc += this.scrollableColumns[i].width;
+    // 1. Total Left Pinned Width (includes row number column if present)
+    this.totalLeftPinnedWidth =
+      this.rowNumberWidth + this.leftPinnedColumns.reduce((sum, c) => sum + c.width, 0);
+
+    // 2. Total Right Pinned Width
+    this.totalRightPinnedWidth = this.rightPinnedColumns.reduce((sum, c) => sum + c.width, 0);
+
+    // 3. Center Column Offsets
+    this.centerColOffsets = new Float32Array(this.centerColumns.length + 1);
+    let accCenter = 0;
+    for (let i = 0; i < this.centerColumns.length; i++) {
+      this.centerColOffsets[i] = accCenter;
+      accCenter += this.centerColumns[i].width;
     }
-    this.scrollableColOffsets[this.scrollableColumns.length] = acc;
-    this.totalScrollableWidth = acc;
+    this.centerColOffsets[this.centerColumns.length] = accCenter;
+    this.totalCenterWidth = accCenter;
+
+    // 4. Right Column Offsets (local accumulated widths within right pinned zone)
+    this.rightColOffsets = new Float32Array(this.rightPinnedColumns.length + 1);
+    let accRight = 0;
+    for (let i = 0; i < this.rightPinnedColumns.length; i++) {
+      this.rightColOffsets[i] = accRight;
+      accRight += this.rightPinnedColumns[i].width;
+    }
+    this.rightColOffsets[this.rightPinnedColumns.length] = accRight;
+
     this.rebuildColumnGroupMap();
   }
 
-  public findScrollableColIndexAtX(scrollX: number): number {
+  /**
+   * Screen X position where the Right Pinned Zone begins.
+   * Sticks to the right edge of the viewport (viewportWidth - totalRightPinnedWidth).
+   */
+  public getRightPinnedStartX(): number {
+    return Math.max(this.totalLeftPinnedWidth, this.viewportWidth - this.totalRightPinnedWidth);
+  }
+
+  /**
+   * Total virtual horizontal content width across all 3 zones.
+   */
+  public getTotalWidth(): number {
+    return this.totalLeftPinnedWidth + this.totalCenterWidth + this.totalRightPinnedWidth;
+  }
+
+  public findCenterColIndexAtX(scrollX: number): number {
     let low = 0;
-    let high = this.scrollableColumns.length - 1;
+    let high = this.centerColumns.length - 1;
     while (low <= high) {
       const mid = (low + high) >>> 1;
-      const start = this.scrollableColOffsets[mid];
-      const end = this.scrollableColOffsets[mid + 1];
+      const start = this.centerColOffsets[mid];
+      const end = this.centerColOffsets[mid + 1];
       if (scrollX >= start && scrollX < end) {
         return mid;
       } else if (scrollX < start) {
@@ -208,36 +301,132 @@ export class GeometryEngine {
         low = mid + 1;
       }
     }
-    return Math.min(Math.max(0, low), Math.max(0, this.scrollableColumns.length - 1));
+    return Math.min(Math.max(0, low), Math.max(0, this.centerColumns.length - 1));
   }
 
+  public findScrollableColIndexAtX(scrollX: number): number {
+    return this.findCenterColIndexAtX(scrollX);
+  }
+
+  /**
+   * Computes the screen X coordinate, width, and pinning status of a column across the 3 zones:
+   * 1. Left Zone: Static offset starting at rowNumberWidth.
+   * 2. Center Zone: Dynamic offset starting at totalLeftPinnedWidth, shifted by scrollLeft.
+   * 3. Right Zone: Static offset anchored to (viewportWidth - totalRightPinnedWidth).
+   */
   public getColumnScreenRect(
     colIndex: number,
     scrollLeft: number
-  ): { x: number; width: number; isFrozen: boolean } {
-    const frozenCount = this.frozenColumns.length;
-    if (colIndex < frozenCount) {
+  ): { x: number; width: number; isFrozen: boolean; pinnedZone?: 'left' | 'center' | 'right' } {
+    const leftCount = this.leftPinnedColumns.length;
+    const centerCount = this.centerColumns.length;
+    const rightCount = this.rightPinnedColumns.length;
+
+    // 1. Left Pinned Zone
+    if (colIndex < leftCount) {
       let x = this.rowNumberWidth;
       for (let i = 0; i < colIndex; i++) {
-        x += this.frozenColumns[i].width;
+        x += this.leftPinnedColumns[i].width;
       }
       return {
         x,
-        width: this.frozenColumns[colIndex]?.width || 0,
+        width: this.leftPinnedColumns[colIndex]?.width || 0,
         isFrozen: true,
-      };
-    } else {
-      const scrollIdx = colIndex - frozenCount;
-      if (scrollIdx < 0 || scrollIdx >= this.scrollableColumns.length) {
-        return { x: 0, width: 0, isFrozen: false };
-      }
-      const x = this.totalFrozenWidth + this.scrollableColOffsets[scrollIdx] - scrollLeft;
-      return {
-        x,
-        width: this.scrollableColumns[scrollIdx].width,
-        isFrozen: false,
+        pinnedZone: 'left',
       };
     }
+
+    // 2. Center Scrollable Zone
+    if (colIndex < leftCount + centerCount) {
+      const centerIdx = colIndex - leftCount;
+      const x = this.totalLeftPinnedWidth + this.centerColOffsets[centerIdx] - scrollLeft;
+      return {
+        x,
+        width: this.centerColumns[centerIdx]?.width || 0,
+        isFrozen: false,
+        pinnedZone: 'center',
+      };
+    }
+
+    // 3. Right Pinned Zone
+    if (colIndex < leftCount + centerCount + rightCount) {
+      const rightIdx = colIndex - leftCount - centerCount;
+      const rightStartX = this.getRightPinnedStartX();
+      const x = rightStartX + this.rightColOffsets[rightIdx];
+      return {
+        x,
+        width: this.rightPinnedColumns[rightIdx]?.width || 0,
+        isFrozen: true,
+        pinnedZone: 'right',
+      };
+    }
+
+    return { x: 0, width: 0, isFrozen: false };
+  }
+
+  /**
+   * Hit test a canvas X coordinate to find the corresponding column in any of the 3 zones.
+   */
+  public getColumnAtX(
+    canvasX: number,
+    scrollLeft: number
+  ): { colIndex: number; column: ColumnDef; isFrozen: boolean; pinnedZone: 'left' | 'center' | 'right' } | null {
+    if (canvasX < this.rowNumberWidth) return null;
+
+    // 1. Check Left Pinned Zone
+    if (canvasX < this.totalLeftPinnedWidth) {
+      let curX = this.rowNumberWidth;
+      for (let i = 0; i < this.leftPinnedColumns.length; i++) {
+        const w = this.leftPinnedColumns[i].width;
+        if (canvasX >= curX && canvasX < curX + w) {
+          return {
+            colIndex: i,
+            column: this.leftPinnedColumns[i],
+            isFrozen: true,
+            pinnedZone: 'left',
+          };
+        }
+        curX += w;
+      }
+      return null;
+    }
+
+    // 2. Check Right Pinned Zone (layered on top of center content)
+    const rightStartX = this.getRightPinnedStartX();
+    if (this.rightPinnedColumns.length > 0 && canvasX >= rightStartX && canvasX <= this.viewportWidth) {
+      let curRX = rightStartX;
+      const baseIdx = this.leftPinnedColumns.length + this.centerColumns.length;
+      for (let i = 0; i < this.rightPinnedColumns.length; i++) {
+        const w = this.rightPinnedColumns[i].width;
+        if (canvasX >= curRX && canvasX < curRX + w) {
+          return {
+            colIndex: baseIdx + i,
+            column: this.rightPinnedColumns[i],
+            isFrozen: true,
+            pinnedZone: 'right',
+          };
+        }
+        curRX += w;
+      }
+      return null;
+    }
+
+    // 3. Check Center Zone
+    if (canvasX < rightStartX) {
+      const scrollX = canvasX - this.totalLeftPinnedWidth + scrollLeft;
+      if (scrollX >= 0 && scrollX < this.totalCenterWidth && this.centerColumns.length > 0) {
+        const cIdx = this.findCenterColIndexAtX(scrollX);
+        const colIndex = this.leftPinnedColumns.length + cIdx;
+        return {
+          colIndex,
+          column: this.centerColumns[cIdx],
+          isFrozen: false,
+          pinnedZone: 'center',
+        };
+      }
+    }
+
+    return null;
   }
 
   public hitTestHeader(canvasX: number, canvasY: number, scrollLeft: number): HeaderHitTestResult | null {
@@ -248,28 +437,51 @@ export class GeometryEngine {
     let clickedCol = -1;
     let headerX = 0;
     let headerW = 0;
+    let pinnedZone: 'left' | 'center' | 'right' = 'center';
 
-    // 1. Frozen Columns
-    let curX = this.rowNumberWidth;
-    for (let i = 0; i < this.frozenColumns.length; i++) {
-      const w = this.frozenColumns[i].width;
-      if (canvasX >= curX && canvasX < curX + w) {
-        clickedCol = i;
-        headerX = curX;
-        headerW = w;
-        break;
+    // 1. Left Pinned Zone
+    if (canvasX < this.totalLeftPinnedWidth) {
+      let curX = this.rowNumberWidth;
+      for (let i = 0; i < this.leftPinnedColumns.length; i++) {
+        const w = this.leftPinnedColumns[i].width;
+        if (canvasX >= curX && canvasX < curX + w) {
+          clickedCol = i;
+          headerX = curX;
+          headerW = w;
+          pinnedZone = 'left';
+          break;
+        }
+        curX += w;
       }
-      curX += w;
     }
 
-    // 2. Scrollable Columns
-    if (clickedCol === -1 && canvasX >= this.totalFrozenWidth) {
-      const sx = canvasX - this.totalFrozenWidth + scrollLeft;
-      if (sx >= 0 && sx < this.totalScrollableWidth && this.scrollableColumns.length > 0) {
-        const sIdx = this.findScrollableColIndexAtX(sx);
-        clickedCol = this.frozenColumns.length + sIdx;
-        headerX = this.totalFrozenWidth + this.scrollableColOffsets[sIdx] - scrollLeft;
-        headerW = this.scrollableColumns[sIdx]?.width || 100;
+    // 2. Right Pinned Zone (layered on top)
+    const rightStartX = this.getRightPinnedStartX();
+    if (clickedCol === -1 && this.rightPinnedColumns.length > 0 && canvasX >= rightStartX && canvasX <= this.viewportWidth) {
+      let curRX = rightStartX;
+      const baseIdx = this.leftPinnedColumns.length + this.centerColumns.length;
+      for (let i = 0; i < this.rightPinnedColumns.length; i++) {
+        const w = this.rightPinnedColumns[i].width;
+        if (canvasX >= curRX && canvasX < curRX + w) {
+          clickedCol = baseIdx + i;
+          headerX = curRX;
+          headerW = w;
+          pinnedZone = 'right';
+          break;
+        }
+        curRX += w;
+      }
+    }
+
+    // 3. Center Scrollable Zone
+    if (clickedCol === -1 && canvasX >= this.totalLeftPinnedWidth && canvasX < rightStartX) {
+      const sx = canvasX - this.totalLeftPinnedWidth + scrollLeft;
+      if (sx >= 0 && sx < this.totalCenterWidth && this.centerColumns.length > 0) {
+        const cIdx = this.findCenterColIndexAtX(sx);
+        clickedCol = this.leftPinnedColumns.length + cIdx;
+        headerX = this.totalLeftPinnedWidth + this.centerColOffsets[cIdx] - scrollLeft;
+        headerW = this.centerColumns[cIdx]?.width || 100;
+        pinnedZone = 'center';
       }
     }
 
@@ -283,9 +495,18 @@ export class GeometryEngine {
 
     let groupColIndices: number[] | undefined;
     if (groupDef) {
-      const isFrozenPartition = clickedCol < this.frozenColumns.length;
-      const minBound = isFrozenPartition ? 0 : this.frozenColumns.length;
-      const maxBound = isFrozenPartition ? this.frozenColumns.length - 1 : this.columns.length - 1;
+      let minBound = 0;
+      let maxBound = this.columns.length - 1;
+      if (pinnedZone === 'left') {
+        minBound = 0;
+        maxBound = this.leftPinnedColumns.length - 1;
+      } else if (pinnedZone === 'center') {
+        minBound = this.leftPinnedColumns.length;
+        maxBound = this.leftPinnedColumns.length + this.centerColumns.length - 1;
+      } else if (pinnedZone === 'right') {
+        minBound = this.leftPinnedColumns.length + this.centerColumns.length;
+        maxBound = this.columns.length - 1;
+      }
       let startIdx = clickedCol;
       let endIdx = clickedCol;
       while (
@@ -323,6 +544,7 @@ export class GeometryEngine {
       isGroupHeaderHit,
       groupDef,
       groupColIndices,
+      pinnedZone,
     };
   }
 
@@ -396,11 +618,11 @@ export class GeometryEngine {
     const cellScreenY = this.headerHeight + row * this.rowHeight - scrollTop;
     const localY = canvasY - cellScreenY;
 
-    // 1. Frozen Columns
-    if (canvasX < this.totalFrozenWidth) {
+    // 1. Left Pinned Zone
+    if (canvasX < this.totalLeftPinnedWidth) {
       let curX = this.rowNumberWidth;
-      for (let i = 0; i < this.frozenColumns.length; i++) {
-        const w = this.frozenColumns[i].width;
+      for (let i = 0; i < this.leftPinnedColumns.length; i++) {
+        const w = this.leftPinnedColumns[i].width;
         if (canvasX >= curX && canvasX < curX + w) {
           return {
             row,
@@ -408,6 +630,7 @@ export class GeometryEngine {
             localX: canvasX - curX,
             localY,
             isFrozen: true,
+            pinnedZone: 'left',
             cellRect: { x: curX, y: cellScreenY, width: w, height: this.rowHeight },
           };
         }
@@ -416,25 +639,51 @@ export class GeometryEngine {
       return null;
     }
 
-    // 2. Scrollable Columns
-    const scrollX = canvasX - this.totalFrozenWidth + scrollLeft;
-    if (scrollX < 0 || scrollX >= this.totalScrollableWidth || this.scrollableColumns.length === 0) {
+    // 2. Right Pinned Zone (layered on top)
+    const rightStartX = this.getRightPinnedStartX();
+    if (this.rightPinnedColumns.length > 0 && canvasX >= rightStartX && canvasX <= this.viewportWidth) {
+      let curRX = rightStartX;
+      const baseIdx = this.leftPinnedColumns.length + this.centerColumns.length;
+      for (let i = 0; i < this.rightPinnedColumns.length; i++) {
+        const w = this.rightPinnedColumns[i].width;
+        if (canvasX >= curRX && canvasX < curRX + w) {
+          return {
+            row,
+            col: baseIdx + i,
+            localX: canvasX - curRX,
+            localY,
+            isFrozen: true,
+            pinnedZone: 'right',
+            cellRect: { x: curRX, y: cellScreenY, width: w, height: this.rowHeight },
+          };
+        }
+        curRX += w;
+      }
       return null;
     }
 
-    const scrollIdx = this.findScrollableColIndexAtX(scrollX);
-    const colIndex = this.frozenColumns.length + scrollIdx;
-    const cellScreenX = this.totalFrozenWidth + this.scrollableColOffsets[scrollIdx] - scrollLeft;
-    const width = this.scrollableColumns[scrollIdx].width;
+    // 3. Center Scrollable Zone
+    if (canvasX < rightStartX) {
+      const scrollX = canvasX - this.totalLeftPinnedWidth + scrollLeft;
+      if (scrollX >= 0 && scrollX < this.totalCenterWidth && this.centerColumns.length > 0) {
+        const centerIdx = this.findCenterColIndexAtX(scrollX);
+        const colIndex = this.leftPinnedColumns.length + centerIdx;
+        const cellScreenX = this.totalLeftPinnedWidth + this.centerColOffsets[centerIdx] - scrollLeft;
+        const width = this.centerColumns[centerIdx].width;
 
-    return {
-      row,
-      col: colIndex,
-      localX: canvasX - cellScreenX,
-      localY,
-      isFrozen: false,
-      cellRect: { x: cellScreenX, y: cellScreenY, width, height: this.rowHeight },
-    };
+        return {
+          row,
+          col: colIndex,
+          localX: canvasX - cellScreenX,
+          localY,
+          isFrozen: false,
+          pinnedZone: 'center',
+          cellRect: { x: cellScreenX, y: cellScreenY, width, height: this.rowHeight },
+        };
+      }
+    }
+
+    return null;
   }
 
   public hitTestColumnResize(
@@ -445,15 +694,16 @@ export class GeometryEngine {
     if (canvasY > this.headerHeight || canvasY < 0) return null;
     const inGroupBand = this.hasColumnGroups && canvasY < this.groupHeaderHeight;
 
+    // 1. Left Pinned Columns
     let curX = this.rowNumberWidth;
-    for (let i = 0; i < this.frozenColumns.length; i++) {
-      curX += this.frozenColumns[i].width;
+    for (let i = 0; i < this.leftPinnedColumns.length; i++) {
+      curX += this.leftPinnedColumns[i].width;
       if (Math.abs(canvasX - curX) <= 4) {
         if (inGroupBand) {
-          const curGroup = this.getColumnGroup(this.frozenColumns[i]);
+          const curGroup = this.getColumnGroup(this.leftPinnedColumns[i]);
           const nextGroup =
-            i + 1 < this.frozenColumns.length
-              ? this.getColumnGroup(this.frozenColumns[i + 1])
+            i + 1 < this.leftPinnedColumns.length
+              ? this.getColumnGroup(this.leftPinnedColumns[i + 1])
               : undefined;
           if (curGroup && nextGroup && curGroup.id === nextGroup.id) {
             continue;
@@ -463,22 +713,47 @@ export class GeometryEngine {
       }
     }
 
-    if (canvasX >= this.totalFrozenWidth) {
-      for (let i = 0; i < this.scrollableColumns.length; i++) {
-        const borderX =
-          this.totalFrozenWidth + this.scrollableColOffsets[i + 1] - scrollLeft;
-        if (Math.abs(canvasX - borderX) <= 4) {
+    // 2. Right Pinned Columns
+    const rightStartX = this.getRightPinnedStartX();
+    if (this.rightPinnedColumns.length > 0 && canvasX >= rightStartX - 4) {
+      let curRX = rightStartX;
+      const baseIdx = this.leftPinnedColumns.length + this.centerColumns.length;
+      for (let i = 0; i < this.rightPinnedColumns.length; i++) {
+        curRX += this.rightPinnedColumns[i].width;
+        if (Math.abs(canvasX - curRX) <= 4) {
           if (inGroupBand) {
-            const curGroup = this.getColumnGroup(this.scrollableColumns[i]);
+            const curGroup = this.getColumnGroup(this.rightPinnedColumns[i]);
             const nextGroup =
-              i + 1 < this.scrollableColumns.length
-                ? this.getColumnGroup(this.scrollableColumns[i + 1])
+              i + 1 < this.rightPinnedColumns.length
+                ? this.getColumnGroup(this.rightPinnedColumns[i + 1])
                 : undefined;
             if (curGroup && nextGroup && curGroup.id === nextGroup.id) {
               continue;
             }
           }
-          return { colIndex: this.frozenColumns.length + i, isFrozen: false };
+          return { colIndex: baseIdx + i, isFrozen: true };
+        }
+      }
+    }
+
+    // 3. Center Scrollable Columns
+    if (canvasX >= this.totalLeftPinnedWidth && canvasX <= rightStartX + 4) {
+      for (let i = 0; i < this.centerColumns.length; i++) {
+        const borderX =
+          this.totalLeftPinnedWidth + this.centerColOffsets[i + 1] - scrollLeft;
+        if (borderX > rightStartX + 4) continue;
+        if (Math.abs(canvasX - borderX) <= 4) {
+          if (inGroupBand) {
+            const curGroup = this.getColumnGroup(this.centerColumns[i]);
+            const nextGroup =
+              i + 1 < this.centerColumns.length
+                ? this.getColumnGroup(this.centerColumns[i + 1])
+                : undefined;
+            if (curGroup && nextGroup && curGroup.id === nextGroup.id) {
+              continue;
+            }
+          }
+          return { colIndex: this.leftPinnedColumns.length + i, isFrozen: false };
         }
       }
     }
