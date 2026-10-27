@@ -1,30 +1,114 @@
 import React from 'react';
 import { ColumnTypeRegistry } from '../columns/ColumnTypeRegistry';
-import { ActiveOverlayState } from '../types/grid';
+import { CellEditorRegistry } from '../editing/CellEditorRegistry';
+import { CellCommitDirection } from '../editing/ICellEditor';
+import { ActiveOverlayState, ColumnDef } from '../types/grid';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
+import { GridApi } from '../core/GridApi';
 
 export interface DynamicCellEditorProps {
-  overlay: ActiveOverlayState;
+  /**
+   * Active overlay state containing cell coordinates, initial value, and column definition.
+   */
+  overlay?: ActiveOverlayState | null;
+
+  /**
+   * Data record of the row currently being edited.
+   */
+  rowData?: Record<string, any>;
+
+  /**
+   * Current active theme tokens.
+   */
   theme: IGridThemeTokens;
+
+  /**
+   * Active grid locale for localized editor strings.
+   */
   locale: IGridLocale;
+
+  /**
+   * GridApi reference passed to custom editors for programmatic grid interaction.
+   */
+  api?: GridApi;
+
+  /**
+   * Validation error message if cell validation failed.
+   */
   validationError?: string | null;
+
+  /**
+   * Whether async validation is in flight.
+   */
   isValidating?: boolean;
-  onCommit: (newValue: any, moveDir?: 'down' | 'right' | 'left' | 'none') => void;
+
+  /**
+   * Callback invoked when the editor commits its new value and navigation direction.
+   */
+  onCommit: (newValue: any, moveDir?: CellCommitDirection) => void | Promise<void>;
+
+  /**
+   * Callback invoked when editing is cancelled.
+   */
   onCancel: () => void;
 }
 
+/**
+ * Resolves the appropriate editor component following priority:
+ * 1. ColumnDef.editor (custom component or registry ID)
+ * 2. CellEditorRegistry.get(column.type)
+ * 3. ColumnTypeRegistry.get(column.type).editorComponent (legacy column plugins)
+ * 4. CellEditorRegistry.getDefaultEditor() (fallback standard input)
+ */
+function resolveEditorComponent(column: ColumnDef): React.ComponentType<any> | null {
+  // 1. Explicit editor defined on column
+  if (column.editor) {
+    if (typeof column.editor === 'function' || typeof column.editor === 'object') {
+      return column.editor as React.ComponentType<any>;
+    }
+    if (typeof column.editor === 'string' && CellEditorRegistry.has(column.editor)) {
+      return CellEditorRegistry.get(column.editor);
+    }
+  }
+
+  // 2. Pluggable CellEditorRegistry by column type
+  if (CellEditorRegistry.has(column.type)) {
+    return CellEditorRegistry.get(column.type);
+  }
+
+  // 3. Legacy ColumnTypeRegistry plugin editor
+  if (ColumnTypeRegistry.has(column.type)) {
+    const plugin = ColumnTypeRegistry.get(column.type);
+    if (plugin?.editorComponent) {
+      return plugin.editorComponent;
+    }
+  }
+
+  // 4. Default fallback editor
+  return CellEditorRegistry.getDefaultEditor();
+}
+
+/**
+ * Generic host overlay component for SheetGL cell editing.
+ * Dynamically resolves and renders custom or built-in editors from CellEditorRegistry / ColumnTypeRegistry.
+ */
 export const DynamicCellEditor: React.FC<DynamicCellEditorProps> = ({
   overlay,
+  rowData,
   theme,
   locale,
+  api,
   validationError,
   isValidating,
   onCommit,
   onCancel,
 }) => {
-  const plugin = ColumnTypeRegistry.get(overlay.column.type);
-  const EditorComponent = plugin.editorComponent;
+  if (!overlay) {
+    return null;
+  }
+
+  const EditorComponent = resolveEditorComponent(overlay.column);
   const isTR = locale.code.startsWith('tr');
 
   if (!EditorComponent) {
@@ -35,18 +119,23 @@ export const DynamicCellEditor: React.FC<DynamicCellEditorProps> = ({
     <>
       <EditorComponent
         value={overlay.initialValue}
+        rowData={rowData}
+        row={rowData}
+        rowIndex={overlay.row}
+        columnIndex={overlay.col}
         column={overlay.column}
         theme={theme}
+        locale={locale}
         rect={{
           x: overlay.x,
           y: overlay.y,
           width: overlay.width,
           height: overlay.height,
         }}
-        locale={locale}
         initialChar={overlay.initialChar}
         onCommit={onCommit}
         onCancel={onCancel}
+        api={api}
       />
       {(validationError || isValidating) && (
         <div

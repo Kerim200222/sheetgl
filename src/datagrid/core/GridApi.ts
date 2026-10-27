@@ -76,4 +76,14 @@ export interface GridApi {
    * Get total scrollable virtual height in pixels.
    */
   getTotalHeight(): number;
+
+  /**
+   * Programmatically start editing a cell at the specified coordinates.
+   */
+  startEditingCell?(col: number, row: number, initialChar?: string): void;
+
+  /**
+   * Programmatically stop editing the active cell.
+   */
+  stopEditingCell?(cancel?: boolean): void;
 }
