@@ -1,6 +1,7 @@
 import React from 'react';
 import { SheetGLLogo } from '../../datagrid/ui/SheetGLLogo';
 import { MaterialIcon } from '../../datagrid/ui/MaterialIcon';
+import { SHEETGL_VERSION } from '../../datagrid/version';
 import { DocThemeColors } from '../types';
 
 export interface DocsHeaderProps {
@@ -100,7 +101,7 @@ export const DocsHeader: React.FC<DocsHeaderProps> = ({
                 opacity: 0.92,
               }}
             >
-              v1.0.6
+              v{SHEETGL_VERSION}
             </span>
           </div>
         </div>

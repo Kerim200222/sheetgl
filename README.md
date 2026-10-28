@@ -1,8 +1,9 @@
-# SheetGL v1.0.6 ⚡
+# SheetGL v2.0.2 ⚡
 
 > **Next-Generation High-Performance WebGL & Canvas Excel DataGrid for React**  
 > Combining **GPU-Accelerated Canvas Virtualization** and **Microsoft Excel UX** with **Enterprise DataGrid Architecture** (Full Event Lifecycle, Async Cascading Backend Lookups, Dynamic Summaries, Batch CRUD, and Role-Based Permissions). Zero dependencies, zero DOM bloat, **100% Free under the MIT License**.
 
+[![Version](https://img.shields.io/badge/version-2.0.2-0284c7.svg)](https://www.npmjs.com/package/sheetgl)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%2B-blue.svg)](https://www.typescriptlang.org)
@@ -11,7 +12,7 @@
 
 ---
 
-## 🌟 Key Highlights in v1.0.6
+## 🌟 Key Highlights in v2.0.2
 
 - 🏎️ **Ultra-Fast Canvas Virtualization:** Renders 10,000–100,000+ rows and dozens of columns on a single high-DPI `<canvas>` element with right-side live scroll indicators, quick jump controls (`⤒` / `⤓`), and automatic edge-scrolling during drag operations.
 - 📐 **Complete Microsoft Excel UX:**
@@ -37,7 +38,7 @@
 
 ## ⚖️ Comparison: SheetGL vs. Traditional Grids
 
-| Feature | SheetGL v1.0.6 | Traditional Enterprise Grids | AG-Grid Enterprise | Standard React Table |
+| Feature | SheetGL v2.0.2 | Traditional Enterprise Grids | AG-Grid Enterprise | Standard React Table |
 | :--- | :---: | :---: | :---: | :---: |
 | **Licensing** | **Free (MIT)** | Commercial ($1,200+/yr) | Commercial ($1,200+/yr) | Free (MIT) |
 | **Rendering Engine** | **HTML5 Canvas 2D** | DOM Virtualization | DOM Virtualization | 100% DOM Nodes |

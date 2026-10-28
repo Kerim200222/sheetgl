@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { SheetGL, ColumnDef } from './datagrid';
-import { SheetGLLogo } from './datagrid';
+import { SheetGL, ColumnDef, SheetGLLogo, SHEETGL_VERSION } from './datagrid';
 
 export interface LandingPageProps {
   isDark: boolean;
@@ -242,7 +241,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   opacity: 0.92,
                 }}
               >
-                v1.0.6
+                v{SHEETGL_VERSION}
               </span>
             </div>
           </div>
@@ -938,7 +937,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               opacity: 0.9,
             }}
           >
-            v1.0.6
+            v{SHEETGL_VERSION}
           </span>
           <span>•</span>
           <span>Next-Gen WebGL & Canvas DataGrid for React</span>

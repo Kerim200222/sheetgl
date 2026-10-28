@@ -1,5 +1,6 @@
 import React from 'react';
 import { DocThemeColors } from '../types';
+import { SHEETGL_VERSION } from '../../datagrid/version';
 import { LiveDemoBox } from '../components/LiveDemoBox';
 import { CodeBlock } from '../components/CodeBlock';
 import {
@@ -82,7 +83,7 @@ npm install sheetgl
 npx sheetgl init --dir ./src/components --name FinancialGrid --rows 1000
 
 # Seçenek B: Yerel .tgz paketi veya proje dizini (path) üzerinden kurulum
-npm install ./path/to/sheetgl-1.0.6.tgz
+npm install ./path/to/sheetgl-${SHEETGL_VERSION}.tgz
 # veya doğrudan yerel klasör yolundan:
 npm install ../path/to/sheetgl`
             : `# Option A: Install directly from NPM Registry (Recommended)
@@ -92,7 +93,7 @@ npm install sheetgl
 npx sheetgl init --dir ./src/components --name FinancialGrid --rows 1000
 
 # Option B: Install from a local .tgz tarball or project directory path
-npm install ./path/to/sheetgl-1.0.6.tgz
+npm install ./path/to/sheetgl-${SHEETGL_VERSION}.tgz
 # or directly from a local folder path:
 npm install ../path/to/sheetgl`
         }

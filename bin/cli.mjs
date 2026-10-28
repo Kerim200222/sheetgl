@@ -19,9 +19,9 @@ const RESET = '\x1b[0m';
 function readPkgVersion() {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, 'package.json'), 'utf8'));
-    return pkg.version || '1.0.6';
+    return pkg.version || '2.0.2';
   } catch {
-    return '1.0.6';
+    return '2.0.2';
   }
 }
 

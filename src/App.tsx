@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
-import { SheetGL, ColumnDef, ColumnGroupDef, GridEventLogEntry, LocaleEngine } from './datagrid';
+import { SheetGL, ColumnDef, ColumnGroupDef, GridEventLogEntry, LocaleEngine, SHEETGL_VERSION } from './datagrid';
 import { DocsPortal } from './DocsPortal';
 import { LandingPage } from './LandingPage';
 import { AppView, RouteState, parseLocationPath, buildRoutePath, syncSeoMeta } from './router';
@@ -361,7 +361,7 @@ export function App() {
       id: 'init-1',
       timestamp: new Date().toLocaleTimeString(),
       eventName: 'onInitialized',
-      summary: 'SheetGL v1.0.6 Enterprise Studio ready (Wizard & Multi-Row Selection active)',
+      summary: `SheetGL v${SHEETGL_VERSION} Enterprise Studio ready (Wizard & Multi-Row Selection active)`,
       status: 'info',
     },
   ]);

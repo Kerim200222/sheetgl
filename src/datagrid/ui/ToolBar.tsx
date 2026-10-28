@@ -14,6 +14,7 @@ import { SummaryType } from '../types/group';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { SheetGLLogo } from './SheetGLLogo';
 import { MaterialIcon } from './MaterialIcon';
+import { SHEETGL_VERSION } from '../version';
 
 export interface ToolBarProps {
   theme: IGridThemeTokens;
@@ -300,7 +301,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
                       opacity: 0.88,
                     }}
                   >
-                    v1.0.6
+                    v{SHEETGL_VERSION}
                   </span>
                 </div>
               </div>
