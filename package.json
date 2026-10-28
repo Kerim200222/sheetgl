@@ -27,8 +27,8 @@
   "type": "module",
   "sideEffects": false,
   "bin": {
-    "sheetgl": "./bin/cli.mjs",
-    "create-sheetgl": "./bin/cli.mjs"
+    "sheetgl": "bin/cli.mjs",
+    "create-sheetgl": "bin/cli.mjs"
   },
   "main": "./dist/lib/sheetgl.cjs",
   "module": "./dist/lib/sheetgl.js",
