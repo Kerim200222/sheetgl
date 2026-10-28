@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Copy, Check } from 'lucide-react';
 import { SheetGL, ColumnDef, SheetGLLogo, SHEETGL_VERSION } from './datagrid';
 
 export interface LandingPageProps {
@@ -27,6 +28,75 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     typeof window !== 'undefined' ? window.innerWidth < 820 : false
   );
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [installTab, setInstallTab] = useState<
+    'npm' | 'npx' | 'create' | 'pnpm' | 'yarn' | 'bun'
+  >('npm');
+  const [copiedCmdKey, setCopiedCmdKey] = useState<string | null>(null);
+  const [showQuickUsage, setShowQuickUsage] = useState<boolean>(false);
+
+  const copyCommand = (key: string, text: string) => {
+    navigator.clipboard?.writeText(text);
+    setCopiedCmdKey(key);
+    setTimeout(() => {
+      setCopiedCmdKey((prev) => (prev === key ? null : prev));
+    }, 2000);
+  };
+
+  const installCommands = {
+    npm: {
+      label: 'npm',
+      cmd: 'npm install sheetgl',
+      hint: isTR
+        ? 'Tek komutla sıfır bağımlılıklı WebGL & Canvas DataGrid kurulumu'
+        : 'Single-command zero-dependency WebGL & Canvas DataGrid install',
+    },
+    npx: {
+      label: 'npx init',
+      cmd: 'npx sheetgl init',
+      hint: isTR
+        ? 'Projenize hazır <SheetGLGrid /> bileşenini üretir'
+        : 'Scaffolds a ready-to-use <SheetGLGrid /> component',
+    },
+    create: {
+      label: 'npx create',
+      cmd: 'npx sheetgl create my-excel-app',
+      hint: isTR
+        ? 'Sıfırdan hazır Vite + React + TS + SheetGL uygulaması kurar'
+        : 'Scaffolds a standalone Vite + React + TS + SheetGL app',
+    },
+    pnpm: {
+      label: 'pnpm',
+      cmd: 'pnpm add sheetgl',
+      hint: 'PNPM Workspace',
+    },
+    yarn: {
+      label: 'yarn',
+      cmd: 'yarn add sheetgl',
+      hint: 'Yarn Package Manager',
+    },
+    bun: {
+      label: 'bun',
+      cmd: 'bun add sheetgl',
+      hint: 'Bun Runtime',
+    },
+  } as const;
+
+  const sheetglUsageSnippet = `import { SheetGL, ColumnDef } from 'sheetgl';
+
+const columns: ColumnDef[] = [
+  { id: 'id', title: 'ID', type: 'number', width: 65, pinned: 'left', readonly: true },
+  { id: 'company', title: 'Company', type: 'text', width: 220, sortable: true, filterable: true },
+  { id: 'balance', title: 'Balance ($)', type: 'currency', width: 150, currencySymbol: '$', summaryType: 'sum' },
+  { id: 'rating', title: 'Trust Score', type: 'rating', width: 120 },
+];
+
+export default function App() {
+  return (
+    <div style={{ width: '100%', height: 560 }}>
+      <SheetGL dataSource={rows} columns={columns} theme="apple-dark" locale="tr" batchEditMode />
+    </div>
+  );
+}`;
 
   useEffect(() => {
     const onResize = () => {
@@ -671,7 +741,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </p>
 
         {/* CTA ACTIONS (Parabol Style) */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 44 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 28 }}>
           <button
             type="button"
             onClick={onOpenStudio}
@@ -743,6 +813,187 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </svg>
             <span>GitHub</span>
           </a>
+        </div>
+
+        {/* ==================================================================
+            INTERACTIVE NPM / NPX / PNPM / BUN CLI & REACT USAGE BAR (uxiGL Style)
+        ================================================================== */}
+        <div
+          style={{
+            maxWidth: 820,
+            margin: '0 auto 34px',
+            borderRadius: 16,
+            border: `1px solid ${colors.cardBorder}`,
+            backgroundColor: isDark ? 'rgba(9, 14, 26, 0.92)' : '#FFFFFF',
+            boxShadow: isDark
+              ? '0 18px 42px -12px rgba(0, 0, 0, 0.65)'
+              : '0 12px 32px -10px rgba(15, 23, 42, 0.08)',
+            overflow: 'hidden',
+            textAlign: 'left',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 8,
+              padding: '8px 14px',
+              borderBottom: `1px solid ${colors.border}`,
+              backgroundColor: isDark ? 'rgba(6, 10, 18, 0.9)' : '#F1F5F9',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+              {(
+                Object.keys(installCommands) as Array<keyof typeof installCommands>
+              ).map((key) => {
+                const item = installCommands[key];
+                const active = installTab === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setInstallTab(key)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: 8,
+                      border: active
+                        ? '1px solid rgba(56, 189, 248, 0.45)'
+                        : '1px solid transparent',
+                      backgroundColor: active
+                        ? isDark
+                          ? 'rgba(2, 132, 199, 0.22)'
+                          : 'rgba(2, 132, 199, 0.12)'
+                        : 'transparent',
+                      color: active
+                        ? isDark
+                          ? '#7DD3FC'
+                          : '#0369A1'
+                        : colors.muted,
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowQuickUsage((p) => !p)}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: showQuickUsage
+                  ? 'rgba(16, 185, 129, 0.18)'
+                  : isDark
+                  ? 'rgba(255, 255, 255, 0.04)'
+                  : '#FFFFFF',
+                color: showQuickUsage ? '#10B981' : colors.text,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {showQuickUsage
+                ? isTR
+                  ? 'Örnek Kodu Gizle'
+                  : 'Hide Code'
+                : isTR
+                ? 'Örnek Kullanım (TSX)'
+                : 'Code Usage (TSX)'}
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '12px 16px',
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 13,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'auto' }}>
+              <span style={{ color: '#10B981', fontWeight: 800 }}>$</span>
+              <code style={{ color: colors.text, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                {installCommands[installTab].cmd}
+              </code>
+              {!isMobile && (
+                <span style={{ fontSize: 11.5, color: colors.muted, fontFamily: 'Inter, sans-serif' }}>
+                  — {installCommands[installTab].hint}
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                copyCommand(`hero-${installTab}`, installCommands[installTab].cmd)
+              }
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F8FAFC',
+                color: colors.text,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11.5,
+                fontWeight: 700,
+                cursor: 'pointer',
+                flexShrink: 0,
+              }}
+            >
+              {copiedCmdKey === `hero-${installTab}` ? (
+                <>
+                  <Check size={13} color="#10B981" />
+                  <span style={{ color: '#10B981' }}>
+                    {isTR ? 'Kopyalandı' : 'Copied'}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Copy size={13} color="#38BDF8" />
+                  <span>{isTR ? 'Kopyala' : 'Copy'}</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {showQuickUsage && (
+            <div
+              style={{
+                padding: '12px 16px',
+                borderTop: `1px solid ${colors.border}`,
+                backgroundColor: isDark ? '#050811' : '#F8FAFC',
+              }}
+            >
+              <pre
+                style={{
+                  margin: 0,
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 12,
+                  lineHeight: 1.6,
+                  color: isDark ? '#A5F3FC' : '#0F172A',
+                  overflowX: 'auto',
+                }}
+              >
+                <code>{sheetglUsageSnippet}</code>
+              </pre>
+            </div>
+          )}
         </div>
 
         {/* LIVE INTERACTIVE CANVAS PREVIEW BADGE */}
@@ -998,33 +1249,44 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             alignItems: 'center',
             justifyContent: 'center',
             gap: 8,
-            marginBottom: 12,
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 11.5,
+            marginBottom: 14,
           }}
         >
-          <span
-            style={{
-              padding: '4px 10px',
-              borderRadius: 8,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#FFFFFF',
-              color: colors.text,
-            }}
-          >
-            $ npm install sheetgl
-          </span>
-          <span
-            style={{
-              padding: '4px 10px',
-              borderRadius: 8,
-              border: `1px solid ${colors.border}`,
-              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#FFFFFF',
-              color: colors.text,
-            }}
-          >
-            $ npx sheetgl init
-          </span>
+          {[
+            { id: 'ft-sheetgl', cmd: 'npm i sheetgl' },
+            { id: 'ft-npx-init', cmd: 'npx sheetgl init' },
+            { id: 'ft-npx-create', cmd: 'npx sheetgl create my-excel-app' },
+            { id: 'ft-uxigl', cmd: 'npm i truncgil-uxigl' },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => copyCommand(item.id, item.cmd)}
+              title={isTR ? 'Panoya kopyala' : 'Copy to clipboard'}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '5px 11px',
+                borderRadius: 8,
+                border: `1px solid ${colors.border}`,
+                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.75)' : '#FFFFFF',
+                color: colors.text,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 11.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <span style={{ color: '#10B981', fontWeight: 800 }}>$</span>
+              <span>{item.cmd}</span>
+              {copiedCmdKey === item.id ? (
+                <Check size={12} color="#10B981" />
+              ) : (
+                <Copy size={12} color={colors.muted} />
+              )}
+            </button>
+          ))}
         </div>
         <div
           style={{
