@@ -142,6 +142,8 @@ export function useGridGeometry({
     visible: false,
     row: 1,
   });
+  const scrollIndicatorStateRef = useRef<{ visible: boolean; row: number }>({ visible: false, row: 1 });
+  const scrollIndicatorRafRef = useRef<number | null>(null);
   const scrollHideTimerRef = useRef<number | null>(null);
 
   // 5. Column Resizing State
@@ -222,11 +224,20 @@ export function useGridGeometry({
       1,
       Math.floor(target.scrollTop / geometryRef.current.rowHeight) + 1
     );
-    setScrollIndicator({ visible: true, row: topRow });
+    if (!scrollIndicatorStateRef.current.visible || scrollIndicatorStateRef.current.row !== topRow) {
+      scrollIndicatorStateRef.current = { visible: true, row: topRow };
+      if (scrollIndicatorRafRef.current === null) {
+        scrollIndicatorRafRef.current = requestAnimationFrame(() => {
+          scrollIndicatorRafRef.current = null;
+          setScrollIndicator({ ...scrollIndicatorStateRef.current });
+        });
+      }
+    }
     if (scrollHideTimerRef.current) {
       window.clearTimeout(scrollHideTimerRef.current);
     }
     scrollHideTimerRef.current = window.setTimeout(() => {
+      scrollIndicatorStateRef.current = { visible: false, row: scrollIndicatorStateRef.current.row };
       setScrollIndicator((prev) => ({ ...prev, visible: false }));
     }, 900);
 
