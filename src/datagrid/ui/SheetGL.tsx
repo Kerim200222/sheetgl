@@ -95,6 +95,10 @@ export interface SheetGLProps {
   ) => void;
   /** Callback fired when a column is interactively resized */
   onColumnResize?: (columnId: string, newWidth: number) => void;
+  /** Optional unique key per module/view to automatically persist & restore filter, sort, and scroll state in localStorage */
+  storageKey?: string;
+  /** Callback fired when viewport scroll position changes */
+  onScrollChange?: (pos: { top: number; left: number }) => void;
 
   /** Navigation direction when Enter key commits cell edit: 'down' | 'right' | 'auto' (default: 'auto' which moves right on inserted rows and down on existing rows) */
   enterNavigation?: 'down' | 'right' | 'auto';
@@ -204,6 +208,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     remoteOperations,
     onFilterChange,
     onColumnResize,
+    storageKey,
+    onScrollChange,
     style,
     className,
   },
@@ -448,14 +454,55 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onRequestRender: () => requestRenderRef.current(),
     onActiveOverlayClear: () => setActiveOverlay(null),
     onColumnResize,
+    onScrollChange: (pos) => {
+      onScrollChange?.(pos);
+      if (storageKey) {
+        if (scrollSaveTimerRef.current) {
+          window.clearTimeout(scrollSaveTimerRef.current);
+        }
+        scrollSaveTimerRef.current = window.setTimeout(() => {
+          try {
+            const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
+            const parsed = raw ? JSON.parse(raw) : {};
+            parsed.scrollTop = Math.round(pos.top);
+            parsed.scrollLeft = Math.round(pos.left);
+            localStorage.setItem(`sheetgl_state_v1_${storageKey}`, JSON.stringify(parsed));
+          } catch {}
+        }, 120);
+      }
+    },
   });
 
-
+  const scrollSaveTimerRef = useRef<number | null>(null);
   const historyRef = useRef<HistoryManager>(new HistoryManager(100));
   // 5. UI State Management
-  const [sortRules, setSortRules] = useState<SortDescriptor[]>(initialSort);
+  const [sortRules, setSortRules] = useState<SortDescriptor[]>(() => {
+    if (storageKey) {
+      try {
+        const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed.sortRules)) return parsed.sortRules;
+        }
+      } catch {}
+    }
+    return initialSort;
+  });
   const [groups, setGroups] = useState<GroupDescriptor[]>(initialGroups);
-  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterState>>({});
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterState>>(() => {
+    if (storageKey) {
+      try {
+        const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.columnFilters && typeof parsed.columnFilters === 'object') {
+            return parsed.columnFilters;
+          }
+        }
+      } catch {}
+    }
+    return {};
+  });
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlayState | null>(null);
   const [editorValidationError, setEditorValidationError] = useState<string | null>(null);
@@ -517,15 +564,73 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     return () => store.off('loaded', handleLoaded);
   }, [store]);
 
-  // Apply initialSort and initialGroups if provided
+  // Restore per-module state (filters, sorting, scroll position) when storageKey or store changes
   useEffect(() => {
-    if (initialSort.length > 0) {
-      store.setSorting(initialSort);
+    if (!storageKey) {
+      if (initialSort.length > 0) {
+        store.setSorting(initialSort);
+      }
+      if (initialGroups.length > 0) {
+        store.setGrouping(initialGroups);
+      }
+      return;
     }
-    if (initialGroups.length > 0) {
-      store.setGrouping(initialGroups);
+
+    let savedFilters: Record<string, ColumnFilterState> = {};
+    let savedSort: SortDescriptor[] = initialSort;
+    let savedTop = 0;
+    let savedLeft = 0;
+
+    try {
+      const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.columnFilters && typeof parsed.columnFilters === 'object') {
+          savedFilters = parsed.columnFilters;
+        }
+        if (Array.isArray(parsed.sortRules)) {
+          savedSort = parsed.sortRules;
+        }
+        if (typeof parsed.scrollTop === 'number' && parsed.scrollTop >= 0) {
+          savedTop = parsed.scrollTop;
+        }
+        if (typeof parsed.scrollLeft === 'number' && parsed.scrollLeft >= 0) {
+          savedLeft = parsed.scrollLeft;
+        }
+      }
+    } catch {}
+
+    setColumnFilters(savedFilters);
+    setSortRules(savedSort);
+
+    const compiled = compileColumnFilters(savedFilters);
+    if (compiled) {
+      store.setFilter(compiled);
+    } else if ((store as any).hasActiveFilter?.()) {
+      store.setFilter(null);
     }
-  }, []);
+    if (savedSort.length > 0) {
+      store.setSorting(savedSort);
+    }
+
+    const timer = window.setTimeout(() => {
+      scrollTo({ top: savedTop, left: savedLeft });
+    }, 30);
+
+    return () => window.clearTimeout(timer);
+  }, [storageKey, store]);
+
+  // Persist columnFilters and sortRules changes per storageKey
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
+      const parsed = raw ? JSON.parse(raw) : {};
+      parsed.columnFilters = columnFilters;
+      parsed.sortRules = sortRules;
+      localStorage.setItem(`sheetgl_state_v1_${storageKey}`, JSON.stringify(parsed));
+    } catch {}
+  }, [storageKey, columnFilters, sortRules]);
 
   const requestRenderRef = useRef<() => void>(() => {});
 
@@ -620,6 +725,30 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       getSelectedRange,
       ensureCellVisible,
       scrollTo,
+      getScrollPosition: () => ({ ...scrollPosRef.current }),
+      clearFilters: async () => {
+        setColumnFilters({});
+        await store.setFilter(null);
+        scrollTo({ top: 0 });
+        setStoreVersion((v) => v + 1);
+        requestRender();
+        onFilterChange?.(null, {});
+      },
+      resetState: async () => {
+        if (storageKey) {
+          try {
+            localStorage.removeItem(`sheetgl_state_v1_${storageKey}`);
+          } catch {}
+        }
+        setSortRules(initialSort);
+        store.setSorting(initialSort);
+        setColumnFilters({});
+        await store.setFilter(null);
+        scrollTo({ top: 0, left: 0 });
+        setStoreVersion((v) => v + 1);
+        requestRender();
+        onFilterChange?.(null, {});
+      },
       setColumnWidth: handleSetColumnWidth,
       getColumnWidth: handleGetColumnWidth,
       getTotalWidth,
@@ -1437,6 +1566,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   const handleDuplicateCellDown = useCallback(() => {
     const norm = selectionRef.current.getNormalizedRange();
     const geom = geometryRef.current;
+    const keyField = (store as any).getKeyField?.() || 'id';
     const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
 
     if (norm.maxRow > norm.minRow) {
@@ -1451,7 +1581,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           if (!colDef) continue;
           updates.push({
             rowIndex: r,
-            rowKey: targetRow.data.id ?? r,
+            rowKey: targetRow.data[keyField] ?? targetRow.data.id ?? r,
             colDef,
             newValue: topRow.data[colDef.id],
           });
@@ -1470,7 +1600,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         if (!colDef) continue;
         updates.push({
           rowIndex: nextR,
-          rowKey: dstRow.data.id ?? nextR,
+          rowKey: dstRow.data[keyField] ?? dstRow.data.id ?? nextR,
           colDef,
           newValue: srcRow.data[colDef.id],
         });
@@ -1486,6 +1616,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   const handleDuplicateCellRight = useCallback(() => {
     const norm = selectionRef.current.getNormalizedRange();
     const geom = geometryRef.current;
+    const keyField = (store as any).getKeyField?.() || 'id';
     const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
 
     if (norm.maxCol > norm.minCol) {
@@ -1506,7 +1637,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             : srcVal;
           updates.push({
             rowIndex: r,
-            rowKey: vRow.data.id ?? r,
+            rowKey: vRow.data[keyField] ?? vRow.data.id ?? r,
             colDef: dstColDef,
             newValue: coercedVal,
           });
@@ -1529,7 +1660,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               : srcVal;
             updates.push({
               rowIndex: r,
-              rowKey: vRow.data.id ?? r,
+              rowKey: vRow.data[keyField] ?? vRow.data.id ?? r,
               colDef: dstColDef,
               newValue: coercedVal,
             });
@@ -2558,6 +2689,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   const handleClearSelectedCells = useCallback(() => {
     const norm = selectionRef.current.getNormalizedRange();
     const geom = geometryRef.current;
+    const keyField = (store as any).getKeyField?.() || 'id';
     const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
 
     for (let r = norm.minRow; r <= norm.maxRow; r++) {
@@ -2574,7 +2706,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             : '';
         updates.push({
           rowIndex: r,
-          rowKey: vRow.data.id ?? r,
+          rowKey: vRow.data[keyField] ?? vRow.data.id ?? r,
           colDef,
           newValue: emptyVal,
         });
@@ -2637,6 +2769,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
       const norm = selectionRef.current.getNormalizedRange();
       const geom = geometryRef.current;
+      const keyField = (store as any).getKeyField?.() || 'id';
       const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
 
       // Excel Behavior: If a single cell is in clipboard and multiple cells are selected, fill entire selection!
@@ -2657,7 +2790,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               : rawCellText.trim();
             updates.push({
               rowIndex: r,
-              rowKey: vRow.data.id ?? r,
+              rowKey: vRow.data[keyField] ?? vRow.data.id ?? r,
               colDef,
               newValue: parsedVal,
             });
@@ -2688,7 +2821,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
             updates.push({
               rowIndex: targetRow,
-              rowKey: vRow.data.id ?? targetRow,
+              rowKey: vRow.data[keyField] ?? vRow.data.id ?? targetRow,
               colDef,
               newValue: parsedVal,
             });

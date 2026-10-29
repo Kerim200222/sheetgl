@@ -13,6 +13,7 @@ export interface UseGridGeometryOptions {
   onRequestRender?: () => void;
   onActiveOverlayClear?: () => void;
   onColumnResize?: (colId: string, newWidth: number) => void;
+  onScrollChange?: (pos: { top: number; left: number }) => void;
 }
 
 export interface ColumnResizeState {
@@ -71,6 +72,7 @@ export function useGridGeometry({
   onRequestRender,
   onActiveOverlayClear,
   onColumnResize,
+  onScrollChange,
 }: UseGridGeometryOptions): UseGridGeometryReturn {
 
   // 1. Column state synced with props synchronously during render
@@ -114,6 +116,18 @@ export function useGridGeometry({
   geometryRef.current.setColumns(effectiveColumns);
 
   useEffect(() => {
+    const sc = scrollContainerRef.current;
+    if (sc) {
+      const totalW = geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
+      const maxLeft = Math.max(0, totalW - sc.clientWidth);
+      if (sc.scrollLeft > maxLeft) {
+        sc.scrollLeft = maxLeft;
+      }
+      scrollPosRef.current = {
+        left: Math.min(sc.scrollLeft, maxLeft),
+        top: sc.scrollTop,
+      };
+    }
     onRequestRender?.();
   }, [effectiveColumns, rowHeight, headerHeight, columnGroups, groupHeaderHeight, onRequestRender]);
 
@@ -217,8 +231,9 @@ export function useGridGeometry({
     }, 900);
 
     onActiveOverlayClear?.();
+    onScrollChange?.(scrollPosRef.current);
     onRequestRender?.();
-  }, [onActiveOverlayClear, onRequestRender]);
+  }, [onActiveOverlayClear, onScrollChange, onRequestRender]);
 
   const ensureCellVisible = useCallback((row: number, col: number) => {
     const geom = geometryRef.current;
@@ -246,13 +261,24 @@ export function useGridGeometry({
 
   const scrollTo = useCallback((options: { top?: number; left?: number; behavior?: ScrollBehavior }) => {
     const sc = scrollContainerRef.current;
-    if (!sc) return;
-    sc.scrollTo({
-      top: options.top ?? sc.scrollTop,
-      left: options.left ?? sc.scrollLeft,
-      behavior: options.behavior,
-    });
-  }, []);
+    const nextTop = options.top ?? sc?.scrollTop ?? scrollPosRef.current.top;
+    const nextLeft = options.left ?? sc?.scrollLeft ?? scrollPosRef.current.left;
+    scrollPosRef.current = { top: nextTop, left: nextLeft };
+    if (sc) {
+      if (options.behavior === 'smooth') {
+        sc.scrollTo({
+          top: nextTop,
+          left: nextLeft,
+          behavior: 'smooth',
+        });
+      } else {
+        sc.scrollTop = nextTop;
+        sc.scrollLeft = nextLeft;
+      }
+    }
+    onScrollChange?.(scrollPosRef.current);
+    onRequestRender?.();
+  }, [onScrollChange, onRequestRender]);
 
   const scrollToTop = useCallback(() => {
     scrollTo({ top: 0, behavior: 'smooth' });

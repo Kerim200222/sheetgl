@@ -58,6 +58,21 @@ export interface GridApi {
   scrollTo(options: { top?: number; left?: number; behavior?: ScrollBehavior }): void;
 
   /**
+   * Get the current scroll position (top and left offsets in pixels).
+   */
+  getScrollPosition(): { top: number; left: number };
+
+  /**
+   * Clear all column header filters and reset filter state.
+   */
+  clearFilters(): Promise<void>;
+
+  /**
+   * Reset stored grid state (filters, sorting, scroll position) for the current storageKey.
+   */
+  resetState(): Promise<void>;
+
+  /**
    * Programmatically change the pixel width of a column.
    */
   setColumnWidth(columnId: string, width: number): void;
