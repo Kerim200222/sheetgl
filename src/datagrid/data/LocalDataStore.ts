@@ -37,6 +37,7 @@ export class LocalDataStore implements IDataStore {
   private insertedKeys = new Set<any>();
   private deletedRows = new Map<any, { data: Record<string, any>; index: number }>();
   private distinctCache = new Map<string, DistinctItem[]>();
+  private cachedSummaries: Record<string, number> | null = null;
 
   private listeners = new Map<string, Set<(...args: any[]) => void>>();
 
@@ -80,11 +81,15 @@ export class LocalDataStore implements IDataStore {
     this.insertedKeys.clear();
     this.deletedRows.clear();
     this.distinctCache.clear();
+    this.cachedSummaries = null;
 
     this.recompute();
   }
 
   public getRowCount(): number {
+    if (this.currentGroups.length === 0) {
+      return this.processedData.length;
+    }
     return this.virtualRows.length;
   }
 
@@ -97,6 +102,15 @@ export class LocalDataStore implements IDataStore {
   }
 
   public getViewRow(rowIndex: number): VirtualRow | undefined {
+    if (this.currentGroups.length === 0) {
+      const item = this.processedData[rowIndex];
+      if (!item) return undefined;
+      return {
+        type: 'data',
+        rawIndex: rowIndex,
+        data: item,
+      };
+    }
     return this.virtualRows[rowIndex];
   }
 
@@ -151,6 +165,7 @@ export class LocalDataStore implements IDataStore {
     } else {
       this.expandedGroupKeys.add(groupKey);
     }
+    this.cachedSummaries = null;
     this.recomputeVirtualRowsOnly();
     return Promise.resolve();
   }
@@ -779,6 +794,7 @@ export class LocalDataStore implements IDataStore {
 
   public getSummaries(): Record<string, number> | undefined {
     if (this.processedData.length === 0) return undefined;
+    if (this.cachedSummaries) return this.cachedSummaries;
     const result: Record<string, number> = {};
 
     for (const [colId, sType] of Object.entries(this.summaryTypes)) {
@@ -820,6 +836,7 @@ export class LocalDataStore implements IDataStore {
       }
     }
 
+    this.cachedSummaries = result;
     return result;
   }
 
@@ -868,6 +885,12 @@ export class LocalDataStore implements IDataStore {
   }
 
   private recomputeVirtualRowsOnly(): void {
+    this.cachedSummaries = null;
+    if (this.currentGroups.length === 0) {
+      this.virtualRows = [];
+      this.emit('loaded');
+      return;
+    }
     this.virtualRows = GroupingEngine.projectVirtualRows(
       this.processedData,
       this.currentGroups,
