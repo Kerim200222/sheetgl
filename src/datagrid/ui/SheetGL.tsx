@@ -113,6 +113,7 @@ export interface SheetGLProps {
   onSaving?: (e: SavingEvent) => void | Promise<void>;
   onSaved?: (e: SavedEvent) => void;
   onAddNewRow?: () => void;
+  onCloneRow?: (rowIndex: number, rowData: Record<string, any>) => void | Promise<void>;
   onRefresh?: () => void;
 
   style?: React.CSSProperties;
@@ -196,6 +197,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onSaving,
     onSaved,
     onAddNewRow,
+    onCloneRow,
     onRefresh,
     remoteOperations,
     onFilterChange,
@@ -1194,6 +1196,13 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         return;
       }
 
+      if (onCloneRow) {
+        await onCloneRow(targetIdx, vRow.data);
+        setStoreVersion((v) => v + 1);
+        requestRender();
+        return;
+      }
+
       const sourceKey = vRow.data.id ?? targetIdx;
       const duplicated = await store.duplicateRow?.(sourceKey, targetIdx);
       if (duplicated) {
@@ -1220,7 +1229,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         requestRender();
       }
     },
-    [store, permissions, onRowInserted, currentLocale, showToast, requestRender]
+    [store, permissions, onCloneRow, onRowInserted, currentLocale, showToast, requestRender]
   );
 
   const handleDeleteRow = useCallback(
@@ -2744,7 +2753,11 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       }
       if (k === 'd') {
         e.preventDefault();
-        handleDuplicateCellDown();
+        if (e.shiftKey) {
+          handleDuplicateRow(row);
+        } else {
+          handleDuplicateCellDown();
+        }
         return;
       }
       // Note: Never hijack Ctrl+R / Ctrl+F5 for cell duplication; allow browser reload

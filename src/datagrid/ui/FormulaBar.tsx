@@ -1036,44 +1036,11 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
         </button>
       )}
 
-      {/* Excel Duplicate Right Button */}
-      {canDuplicate && onDuplicateRight && (
-        <button
-          type="button"
-          onClick={onDuplicateRight}
-          disabled={!isEditable}
-          title={
-            isTR
-              ? 'Mevcut hücre değerini bir sağ sütuna kopyala (Alt+R)'
-              : 'Duplicate current cell value right (Alt+R)'
-          }
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-            padding: isMobile ? '3px 6px' : '3px 8px',
-            borderRadius: 4,
-            border: `1px solid ${theme.canvas.gridLine}`,
-            backgroundColor: theme.canvas.bg,
-            color: isEditable ? theme.canvas.cellText : theme.dom.toolbarText,
-            opacity: isEditable ? 1 : 0.45,
-            cursor: isEditable ? 'pointer' : 'not-allowed',
-            fontSize: 11,
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          {renderBtnContent('arrow_forward', isTR ? 'Sağa Çoğalt' : 'Fill Right')}
-        </button>
-      )}
-
       {/* Clone Active Row Button */}
       {canDuplicate && onDuplicateRow && (
         <button
           type="button"
           onClick={onDuplicateRow}
-          disabled={!isEditable}
           title={
             isTR
               ? 'Seçili satırın tam kopyasını oluştur (Ctrl+Shift+D)'
@@ -1087,9 +1054,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
             borderRadius: 4,
             border: `1px solid ${theme.canvas.gridLine}`,
             backgroundColor: theme.canvas.bg,
-            color: isEditable ? theme.canvas.cellText : theme.dom.toolbarText,
-            opacity: isEditable ? 1 : 0.45,
-            cursor: isEditable ? 'pointer' : 'not-allowed',
+            color: theme.canvas.cellText,
+            opacity: 1,
+            cursor: 'pointer',
             fontSize: 11,
             fontWeight: 500,
             whiteSpace: 'nowrap',
