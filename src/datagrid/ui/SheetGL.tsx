@@ -564,9 +564,28 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     return () => store.off('loaded', handleLoaded);
   }, [store]);
 
+  // Persist columnFilters and sortRules changes per storageKey
+  const hydratedStorageKeyRef = useRef<string | undefined>(storageKey);
+  useEffect(() => {
+    if (!storageKey || hydratedStorageKeyRef.current !== storageKey) return;
+    try {
+      const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
+      const parsed = raw ? JSON.parse(raw) : {};
+      parsed.columnFilters = columnFilters;
+      parsed.sortRules = sortRules;
+      localStorage.setItem(`sheetgl_state_v1_${storageKey}`, JSON.stringify(parsed));
+    } catch {}
+  }, [storageKey, columnFilters, sortRules]);
+
   // Restore per-module state (filters, sorting, scroll position) when storageKey or store changes
   useEffect(() => {
+    if (scrollSaveTimerRef.current) {
+      window.clearTimeout(scrollSaveTimerRef.current);
+      scrollSaveTimerRef.current = null;
+    }
+
     if (!storageKey) {
+      hydratedStorageKeyRef.current = undefined;
       if (initialSort.length > 0) {
         store.setSorting(initialSort);
       }
@@ -602,6 +621,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
     setColumnFilters(savedFilters);
     setSortRules(savedSort);
+    hydratedStorageKeyRef.current = storageKey;
 
     const compiled = compileColumnFilters(savedFilters);
     if (compiled) {
@@ -617,20 +637,14 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       scrollTo({ top: savedTop, left: savedLeft });
     }, 30);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      if (scrollSaveTimerRef.current) {
+        window.clearTimeout(scrollSaveTimerRef.current);
+        scrollSaveTimerRef.current = null;
+      }
+    };
   }, [storageKey, store]);
-
-  // Persist columnFilters and sortRules changes per storageKey
-  useEffect(() => {
-    if (!storageKey) return;
-    try {
-      const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
-      const parsed = raw ? JSON.parse(raw) : {};
-      parsed.columnFilters = columnFilters;
-      parsed.sortRules = sortRules;
-      localStorage.setItem(`sheetgl_state_v1_${storageKey}`, JSON.stringify(parsed));
-    } catch {}
-  }, [storageKey, columnFilters, sortRules]);
 
   const requestRenderRef = useRef<() => void>(() => {});
 
