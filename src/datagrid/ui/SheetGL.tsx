@@ -2818,9 +2818,14 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             const colDef = geom.columns[c];
             if (!colDef) continue;
             const plugin = ColumnTypeRegistry.get(colDef.type);
-            const parsedVal = plugin.parseClipboard
-              ? plugin.parseClipboard(rawCellText, colDef)
-              : rawCellText.trim();
+            let parsedVal: any = rawCellText.trim();
+            try {
+              if (plugin.parseClipboard) {
+                parsedVal = plugin.parseClipboard(rawCellText, colDef);
+              }
+            } catch (err) {
+              parsedVal = rawCellText.trim();
+            }
             updates.push({
               rowIndex: r,
               rowKey: vRow.data[keyField] ?? vRow.data.id ?? r,
@@ -2848,9 +2853,14 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             const colDef = geom.columns[targetCol];
             if (!colDef) return;
             const plugin = ColumnTypeRegistry.get(colDef.type);
-            const parsedVal = plugin.parseClipboard
-              ? plugin.parseClipboard(cellText, colDef)
-              : cellText.trim();
+            let parsedVal: any = cellText.trim();
+            try {
+              if (plugin.parseClipboard) {
+                parsedVal = plugin.parseClipboard(cellText, colDef);
+              }
+            } catch (err) {
+              parsedVal = cellText.trim();
+            }
 
             updates.push({
               rowIndex: targetRow,

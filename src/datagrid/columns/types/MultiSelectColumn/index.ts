@@ -29,14 +29,17 @@ export const MultiSelectColumnPlugin: IColumnTypePlugin<string[] | string> = {
   },
 
   parseClipboard(text, column) {
-    const parts = normalizeMultiValue(text);
+    if (text === null || text === undefined) return [];
+    const parts = normalizeMultiValue(String(text).replace(/^["']|["']$/g, '').trim());
     if (!column.options || column.options.length === 0) return parts;
     return parts.map((p) => {
-      const clean = p.toLowerCase();
-      const match = column.options?.find(
-        (o) => o.value.toLowerCase() === clean || o.label.toLowerCase() === clean
-      );
-      return match ? match.value : p;
+      const clean = String(p ?? '').replace(/^["']|["']$/g, '').trim().toLowerCase();
+      const match = column.options?.find((o) => {
+        const valStr = String(o?.value ?? '').replace(/^["']|["']$/g, '').trim().toLowerCase();
+        const lblStr = String(o?.label ?? '').replace(/^["']|["']$/g, '').trim().toLowerCase();
+        return valStr === clean || lblStr === clean;
+      });
+      return match ? match.value : String(p).replace(/^["']|["']$/g, '').trim();
     });
   },
 

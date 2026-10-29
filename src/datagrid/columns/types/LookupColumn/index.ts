@@ -29,11 +29,15 @@ export const LookupColumnPlugin: IColumnTypePlugin<string> = {
   },
 
   parseClipboard(text, column) {
-    const clean = text.trim().toLowerCase();
-    const match = column.options?.find(
-      (o) => o.value.toLowerCase() === clean || o.label.toLowerCase() === clean
-    );
-    return match ? match.value : text.trim();
+    if (text === null || text === undefined) return '';
+    const clean = String(text).replace(/^["']|["']$/g, '').trim().toLowerCase();
+    if (!clean) return '';
+    const match = column.options?.find((o) => {
+      const valStr = String(o?.value ?? '').replace(/^["']|["']$/g, '').trim().toLowerCase();
+      const lblStr = String(o?.label ?? '').replace(/^["']|["']$/g, '').trim().toLowerCase();
+      return valStr === clean || lblStr === clean;
+    });
+    return match ? match.value : String(text).replace(/^["']|["']$/g, '').trim();
   },
 
   formatClipboard(value, column) {
