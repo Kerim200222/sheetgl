@@ -1110,32 +1110,15 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
       const defaultRow: Record<string, any> = {};
       for (const col of columns) {
-        if (col.id === 'id') continue;
+        if (col.id === 'id' || col.id.startsWith('__')) continue;
         if (col.defaultValue !== undefined) {
           defaultRow[col.id] = col.defaultValue;
-        } else if (col.type === 'number' || col.type === 'currency') {
-          defaultRow[col.id] = 0;
         } else if (col.type === 'boolean') {
           defaultRow[col.id] = false;
-        } else if (col.type === 'rating') {
-          defaultRow[col.id] = 3;
-        } else if (col.type === 'progress') {
-          defaultRow[col.id] = 50;
-        } else if (col.type === 'select' || col.type === 'dropdown') {
-          defaultRow[col.id] = col.options?.[0]?.value ?? '';
-        } else if (col.type === 'multiselect') {
-          defaultRow[col.id] = (col as any).defaultValue ?? '';
-        } else if (col.type === 'date') {
-          defaultRow[col.id] = new Date().toISOString().split('T')[0];
-        } else if (col.type === 'datetime') {
-          const now = new Date();
-          defaultRow[col.id] = `${now.toISOString().split('T')[0]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        } else if (col.type === 'time') {
-          defaultRow[col.id] = '09:30';
         } else if (col.type === 'sparkline') {
-          defaultRow[col.id] = [25, 40, 35, 60, 55, 75, 85];
-        } else if (col.type === 'text') {
-          defaultRow[col.id] = col.id === 'company' ? 'New Enterprise Record' : col.id === 'city' ? 'New York' : col.id === 'category' ? 'Enterprise SaaS' : col.id === 'code' ? `ACC-${Math.floor(100000 + Math.random() * 900000)}` : '';
+          defaultRow[col.id] = [];
+        } else {
+          defaultRow[col.id] = '';
         }
       }
 
@@ -1335,6 +1318,19 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       }
 
       // Multi-row / Bulk deletion with progress bar and O(N) chunked processing
+      if (onRowRemoving && sampleRows[0]) {
+        const evt: RowRemovingEvent = {
+          key: rowKeys[0],
+          data: sampleRows[0],
+          cancel: false,
+        };
+        await onRowRemoving(evt);
+        if (evt.cancel) {
+          setDeleteConfirmModal(null);
+          return;
+        }
+      }
+
       if (store.deleteRowsBatch) {
         await store.deleteRowsBatch(rowKeys, onProgress);
       } else {
@@ -2571,7 +2567,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         const colDef = geom.columns[c];
         if (!colDef) continue;
         const emptyVal =
-          colDef.type === 'number' || colDef.type === 'currency' || colDef.type === 'progress' || colDef.type === 'rating'
+          colDef.type === 'progress' || colDef.type === 'rating'
             ? 0
             : colDef.type === 'boolean'
             ? false
@@ -3504,18 +3500,27 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             onDuplicateCellDown={handleDuplicateCellDown}
             onDuplicateCellRight={handleDuplicateCellRight}
             onDuplicateRow={() => handleDuplicateRow(contextMenu.row)}
-            onInsertRowAbove={() => handleInsertRow(Math.max(0, contextMenu.row - 1))}
-            onInsertRowBelow={() => handleInsertRow(contextMenu.row)}
+            onInsertRowAbove={() => handleInsertRow(Math.max(0, contextMenu.row))}
+            onInsertRowBelow={() => handleInsertRow(contextMenu.row + 1)}
             onClearCells={handleClearSelectedCells}
             onDeleteRow={() => handleDeleteRow(contextMenu.row)}
             onFilterByCellValue={() => {
-              if (contextMenu.column && contextMenu.rowData) {
-                const val = contextMenu.rowData[contextMenu.column.id];
-                handleApplyColumnFilter(contextMenu.column.id, {
-                  columnId: contextMenu.column.id,
-                  mode: 'values',
-                  selectedValues: [val],
-                });
+              if (contextMenu.column) {
+                const vRow = store.getViewRow(contextMenu.row);
+                const rowObj =
+                  contextMenu.rowData || (vRow && vRow.type === 'data' ? vRow.data : null);
+                if (rowObj) {
+                  const rawVal = rowObj[contextMenu.column.id];
+                  const filterVal =
+                    rawVal === null || rawVal === undefined || String(rawVal).trim() === ''
+                      ? '__SHEETGL_BLANK__'
+                      : String(rawVal);
+                  handleApplyColumnFilter(contextMenu.column.id, {
+                    columnId: contextMenu.column.id,
+                    mode: 'values',
+                    selectedValues: [filterVal],
+                  });
+                }
               }
             }}
             onToggleGroupColumn={() => {
