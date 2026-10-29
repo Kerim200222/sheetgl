@@ -63,6 +63,7 @@ function parseIsoParts(raw: any): { year: number; month: number; day: number; fo
 
 export const DateEditor: React.FC<CellEditorProps<string>> = ({
   value,
+  initialChar,
   rect,
   theme,
   locale,
@@ -71,9 +72,12 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
 }) => {
   const initial = parseIsoParts(value);
   const localeCode = locale?.code || 'tr-TR';
-  const [dateVal, setDateVal] = useState<string>(() =>
-    value ? FilterEngine.formatLocalizedDate(initial.formatted, localeCode) : ''
-  );
+  const [dateVal, setDateVal] = useState<string>(() => {
+    if (initialChar !== undefined && initialChar !== '') {
+      return initialChar;
+    }
+    return value ? FilterEngine.formatLocalizedDate(initial.formatted, localeCode) : '';
+  });
   const [viewYear, setViewYear] = useState<number>(initial.year);
   const [viewMonth, setViewMonth] = useState<number>(initial.month); // 1..12
 
@@ -81,6 +85,7 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const latestValRef = useRef<string>(dateVal);
   latestValRef.current = dateVal;
+  const committedRef = useRef<boolean>(false);
 
   const normalizeCommitValue = (rawStr: string): string => {
     const trimmed = rawStr.trim();
@@ -89,16 +94,29 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
     return parsed ? parsed.isoDate : trimmed;
   };
 
+  const safeCommit = (val: string, move: 'none' | 'down' | 'right' | 'left' = 'none') => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    onCommit(val, move);
+  };
+
   useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    if (initialChar !== undefined && initialChar !== '') {
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    } else {
+      el.select();
+    }
   }, []);
 
   // Close & commit when clicking outside the DateEditor container
   useEffect(() => {
     const handleOutsideMouseDown = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        onCommit(normalizeCommitValue(latestValRef.current), 'none');
+        safeCommit(normalizeCommitValue(latestValRef.current), 'none');
       }
     };
     document.addEventListener('mousedown', handleOutsideMouseDown, true);
@@ -111,12 +129,13 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
     e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
-      onCommit(normalizeCommitValue(dateVal), e.shiftKey ? 'none' : 'down');
+      safeCommit(normalizeCommitValue(dateVal), e.shiftKey ? 'none' : 'down');
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      onCommit(normalizeCommitValue(dateVal), e.shiftKey ? 'left' : 'right');
+      safeCommit(normalizeCommitValue(dateVal), e.shiftKey ? 'left' : 'right');
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      committedRef.current = true;
       onCancel();
     }
   };
@@ -141,15 +160,17 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
 
   const selectDay = (day: number) => {
     const nextIso = `${viewYear}-${String(viewMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    latestValRef.current = nextIso;
     setDateVal(nextIso);
-    onCommit(nextIso, 'none');
+    safeCommit(nextIso, 'none');
   };
 
   const selectToday = () => {
     const now = new Date();
     const nextIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    latestValRef.current = nextIso;
     setDateVal(nextIso);
-    onCommit(nextIso, 'none');
+    safeCommit(nextIso, 'none');
   };
 
   // Build days in current month view
@@ -168,6 +189,7 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
     : ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
   const selectedParts = dateVal ? parseIsoParts(dateVal) : null;
+  const openAbove = rect.y > 280 && typeof window !== 'undefined' && rect.y + rect.height + 280 > window.innerHeight - 80;
 
   return (
     <div
@@ -230,7 +252,9 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
       {/* Interactive Calendar Dropdown */}
       <div
         style={{
-          marginTop: 4,
+          ...(openAbove
+            ? { position: 'absolute' as const, bottom: rect.height + 4, left: 0 }
+            : { marginTop: 4 }),
           width: 236,
           padding: 10,
           backgroundColor: theme.dom.popoverBg,
@@ -253,7 +277,11 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
         >
           <button
             type="button"
-            onClick={handlePrevMonth}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handlePrevMonth();
+            }}
             style={{
               width: 26,
               height: 26,
@@ -317,7 +345,11 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
           </div>
           <button
             type="button"
-            onClick={handleNextMonth}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              handleNextMonth();
+            }}
             style={{
               width: 26,
               height: 26,
@@ -378,6 +410,11 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
               <button
                 key={day}
                 type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  selectDay(day);
+                }}
                 onClick={() => selectDay(day)}
                 style={{
                   height: 26,
@@ -411,7 +448,14 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
         >
           <button
             type="button"
-            onClick={() => onCommit('', 'none')}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              latestValRef.current = '';
+              setDateVal('');
+              safeCommit('', 'none');
+            }}
+            onClick={() => safeCommit('', 'none')}
             style={{
               padding: '4px 8px',
               fontSize: 11,
@@ -426,6 +470,11 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
           </button>
           <button
             type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              selectToday();
+            }}
             onClick={selectToday}
             style={{
               padding: '4px 10px',
