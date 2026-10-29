@@ -11,6 +11,8 @@ export interface IGridThemeTokens {
   // Canvas 2D Doğrudan Çizim Renkleri
   canvas: {
     bg: string;
+    zebraRowBg?: string;
+    rowHoverBg?: string;
     gridLine: string;
     headerBg: string;
     headerText: string;

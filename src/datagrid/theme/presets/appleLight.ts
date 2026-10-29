@@ -1,4 +1,4 @@
-﻿import { IGridThemeTokens } from '../IGridTheme';
+import { IGridThemeTokens } from '../IGridTheme';
 
 export const appleLight: IGridThemeTokens = {
   name: 'apple-light',
@@ -10,6 +10,8 @@ export const appleLight: IGridThemeTokens = {
 
   canvas: {
     bg: '#FFFFFF',
+    zebraRowBg: '#F4F7FB',
+    rowHoverBg: 'rgba(0, 122, 255, 0.04)',
     gridLine: '#E5E5EA',
     headerBg: '#F5F5F7',
     headerText: '#1D1D1F',

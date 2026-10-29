@@ -10,6 +10,8 @@ export const googleLight: IGridThemeTokens = {
 
   canvas: {
     bg: '#FFFFFF',
+    zebraRowBg: '#F4F6F9',
+    rowHoverBg: 'rgba(26, 115, 232, 0.04)',
     gridLine: '#E0E0E0',
     headerBg: '#F8F9FA',
     headerText: '#3C4043',

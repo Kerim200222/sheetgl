@@ -10,6 +10,8 @@ export const googleDark: IGridThemeTokens = {
 
   canvas: {
     bg: '#202124',
+    zebraRowBg: '#26282C',
+    rowHoverBg: 'rgba(138, 180, 248, 0.06)',
     gridLine: '#3C4043',
     headerBg: '#2D2E30',
     headerText: '#E8EAED',

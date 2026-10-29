@@ -33,6 +33,7 @@ export interface RenderParams {
   permissions?: GridPermissions;
   selectionMode?: RowSelectionMode;
   selectedRowKeys?: Set<any>;
+  zebraStriping?: boolean | string | { light: string; dark: string };
 }
 
 export class CanvasRenderer {
@@ -63,6 +64,7 @@ export class CanvasRenderer {
       permissions,
       selectionMode = 'none',
       selectedRowKeys,
+      zebraStriping = true,
     } = params;
 
     const ctx = canvas.getContext('2d');
@@ -119,6 +121,19 @@ export class CanvasRenderer {
       }
 
       const normSel = selection.getNormalizedRange();
+      const resolvedZebraBg =
+        zebraStriping === false
+          ? undefined
+          : typeof zebraStriping === 'string'
+            ? zebraStriping
+            : typeof zebraStriping === 'object' && zebraStriping !== null
+              ? theme.isDark
+                ? zebraStriping.dark
+                : zebraStriping.light
+              : theme.canvas.zebraRowBg || (theme.isDark ? '#232428' : '#F4F7FB');
+      const resolvedRowHoverBg =
+        theme.canvas.rowHoverBg ||
+        (theme.isDark ? 'rgba(10, 132, 255, 0.06)' : 'rgba(0, 122, 255, 0.035)');
 
       // ========================================================================
       // DATA ROWS & CELLS
@@ -152,6 +167,8 @@ export class CanvasRenderer {
         const isRowInserted = store.isRowInserted?.(rowKey) ?? false;
         const isRowLoading = loadingRowKeys?.has(rowKey) ?? false;
         const isRowInActiveSel = r >= normSel.minRow && r <= normSel.maxRow;
+        const isZebraRow = Boolean(resolvedZebraBg && r % 2 === 1);
+        const isRowHovered = hoveredCell?.row === r;
 
         // 1. SCROLLABLE COLUMNS
         ctx.save();
@@ -163,6 +180,25 @@ export class CanvasRenderer {
           Math.max(0, height - headerH)
         );
         ctx.clip();
+
+        if (isZebraRow && resolvedZebraBg) {
+          ctx.fillStyle = resolvedZebraBg;
+          ctx.fillRect(
+            geometry.totalFrozenWidth,
+            rowY,
+            Math.max(0, width - geometry.totalFrozenWidth),
+            rowH
+          );
+        }
+        if (isRowHovered) {
+          ctx.fillStyle = resolvedRowHoverBg;
+          ctx.fillRect(
+            geometry.totalFrozenWidth,
+            rowY,
+            Math.max(0, width - geometry.totalFrozenWidth),
+            rowH
+          );
+        }
 
         for (let sc = startScrollColIdx; sc <= endScrollColIdx; sc++) {
           const colIdx = geometry.frozenColumns.length + sc;
@@ -206,8 +242,12 @@ export class CanvasRenderer {
         let curFrozenX = rowNumW;
         for (let fc = 0; fc < geometry.frozenColumns.length; fc++) {
           const col = geometry.frozenColumns[fc];
-          ctx.fillStyle = theme.canvas.bg;
+          ctx.fillStyle = isZebraRow && resolvedZebraBg ? resolvedZebraBg : theme.canvas.bg;
           ctx.fillRect(curFrozenX, rowY, col.width, rowH);
+          if (isRowHovered) {
+            ctx.fillStyle = resolvedRowHoverBg;
+            ctx.fillRect(curFrozenX, rowY, col.width, rowH);
+          }
 
           const colStyle = ColumnColorEngine.resolveColumnStyle(
             col,
@@ -247,7 +287,11 @@ export class CanvasRenderer {
           ? theme.isDark
             ? 'rgba(10, 132, 255, 0.22)'
             : 'rgba(0, 122, 255, 0.12)'
-          : theme.canvas.rowNumberBg;
+          : isZebraRow
+            ? theme.isDark
+              ? '#202124'
+              : '#EEF2F7'
+            : theme.canvas.rowNumberBg;
         ctx.fillRect(0, rowY, rowNumW, rowH);
 
         // Inserted row left indicator bar
@@ -609,9 +653,6 @@ export class CanvasRenderer {
     } else if (isColDirty) {
       // Subtle column-wide tint when this column has uncommitted modifications
       ctx.fillStyle = theme.isDark ? 'rgba(34, 197, 94, 0.05)' : 'rgba(22, 163, 74, 0.04)';
-      ctx.fillRect(cellX, rowY, colW, rowH);
-    } else if (isReadonly && col.type !== 'action' && col.type !== 'sparkline') {
-      ctx.fillStyle = theme.isDark ? 'rgba(255, 255, 255, 0.018)' : 'rgba(0, 0, 0, 0.018)';
       ctx.fillRect(cellX, rowY, colW, rowH);
     }
 

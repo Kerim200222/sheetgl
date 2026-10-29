@@ -102,6 +102,10 @@ export interface SheetGLProps {
 
   /** Navigation direction when Enter key commits cell edit: 'down' | 'right' | 'auto' (default: 'auto' which moves right on inserted rows and down on existing rows) */
   enterNavigation?: 'down' | 'right' | 'auto';
+  /** Whether to render alternating horizontal zebra stripes on odd data rows (default: true). Can also pass a custom CSS color or { light, dark } color pair. */
+  zebraStriping?: boolean | string | { light: string; dark: string };
+  /** DevExtreme-compatible alias for `zebraStriping` (default: true) */
+  rowAlternationEnabled?: boolean;
   // Enterprise Lifecycle Event Triggers
   onEditingStart?: (e: EditingStartEvent) => void;
   onCellValueChanging?: (e: CellValueChangingEvent) => void;
@@ -183,6 +187,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onSummaryConfigChange,
     showFormulaBar = true,
     enterNavigation = 'auto',
+    zebraStriping,
+    rowAlternationEnabled,
     selectionMode: userSelectionMode = 'none',
     onSelectionModeChange,
     selectedRowKeys: userSelectedRowKeys,
@@ -709,6 +715,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         permissions,
         selectionMode: rowSelectionMode,
         selectedRowKeys: selectedRowKeysSet,
+        zebraStriping: zebraStriping ?? rowAlternationEnabled ?? true,
       });
     });
   }, [
@@ -722,6 +729,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     permissions,
     rowSelectionMode,
     selectedRowKeysSet,
+    zebraStriping,
+    rowAlternationEnabled,
   ]);
 
   requestRenderRef.current = requestRender;
