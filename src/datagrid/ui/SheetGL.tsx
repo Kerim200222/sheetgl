@@ -114,6 +114,7 @@ export interface SheetGLProps {
   onSaved?: (e: SavedEvent) => void;
   onAddNewRow?: () => void;
   onCloneRow?: (rowIndex: number, rowData: Record<string, any>) => void | Promise<void>;
+  onViewRowDetail?: (rowIndex: number, rowData: Record<string, any>) => void;
   onRefresh?: () => void;
 
   style?: React.CSSProperties;
@@ -198,6 +199,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onSaved,
     onAddNewRow,
     onCloneRow,
+    onViewRowDetail,
     onRefresh,
     remoteOperations,
     onFilterChange,
@@ -3557,6 +3559,16 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
                 });
               }
             }}
+            onViewRowDetail={
+              onViewRowDetail
+                ? () => {
+                    const vRow = store.getViewRow(contextMenu.row);
+                    const rData =
+                      contextMenu.rowData || (vRow && vRow.type === 'data' ? vRow.data : {});
+                    onViewRowDetail(contextMenu.row, rData);
+                  }
+                : undefined
+            }
             onClose={() => setContextMenu(null)}
           />
         )}

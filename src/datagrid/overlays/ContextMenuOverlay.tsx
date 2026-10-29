@@ -41,6 +41,7 @@ export interface ContextMenuOverlayProps {
   onToggleColumnReadonly: () => void;
   onChangeSummaryType: (summaryType: SummaryType) => void;
   onOpenSparklineModal?: () => void;
+  onViewRowDetail?: () => void;
   onClose: () => void;
 }
 
@@ -70,6 +71,7 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
   onToggleColumnReadonly,
   onChangeSummaryType,
   onOpenSparklineModal,
+  onViewRowDetail,
   onClose,
 }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -429,6 +431,18 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
               {isCellEditable ? 'WRITE' : 'READONLY'}
             </span>
           </div>
+
+          {onViewRowDetail && (
+            <>
+              {renderItem(
+                'visibility',
+                isTR ? 'Satır Detayını İncele (View)' : 'View Row Details (View)',
+                undefined,
+                onViewRowDetail
+              )}
+              {divider}
+            </>
+          )}
 
           {renderItem(
             'content_copy',
