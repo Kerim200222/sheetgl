@@ -233,137 +233,137 @@ export function useGridGeometry({
     onActiveOverlayClear?.();
     onScrollChange?.(scrollPosRef.current);
     onRequestRender?.();
-  }, [onActiveOverlayClear, onScrollChange, onRequestRender]);
+}, [onActiveOverlayClear, onScrollChange, onRequestRender]);
 
-  const ensureCellVisible = useCallback((row: number, col: number) => {
-    const geom = geometryRef.current;
-    const sc = scrollContainerRef.current;
-    if (!sc) return;
+const ensureCellVisible = useCallback((row: number, col: number) => {
+  const geom = geometryRef.current;
+  const sc = scrollContainerRef.current;
+  if (!sc) return;
 
-    const cellTop = geom.headerHeight + row * geom.rowHeight;
-    const cellBottom = cellTop + geom.rowHeight;
+  const cellTop = geom.headerHeight + row * geom.rowHeight;
+  const cellBottom = cellTop + geom.rowHeight;
 
-    if (cellTop < sc.scrollTop + geom.headerHeight) {
-      sc.scrollTop = cellTop - geom.headerHeight;
-    } else if (cellBottom > sc.scrollTop + sc.clientHeight) {
-      sc.scrollTop = cellBottom - sc.clientHeight;
+  if (cellTop < sc.scrollTop + geom.headerHeight) {
+    sc.scrollTop = cellTop - geom.headerHeight;
+  } else if (cellBottom > sc.scrollTop + sc.clientHeight) {
+    sc.scrollTop = cellBottom - sc.clientHeight;
+  }
+
+  const colRect = geom.getColumnScreenRect(col, sc.scrollLeft);
+  if (!colRect.isFrozen) {
+    if (colRect.x < geom.totalFrozenWidth) {
+      sc.scrollLeft -= geom.totalFrozenWidth - colRect.x;
+    } else if (colRect.x + colRect.width > sc.clientWidth) {
+      sc.scrollLeft += colRect.x + colRect.width - sc.clientWidth;
     }
+  }
+}, []);
 
-    const colRect = geom.getColumnScreenRect(col, sc.scrollLeft);
-    if (!colRect.isFrozen) {
-      if (colRect.x < geom.totalFrozenWidth) {
-        sc.scrollLeft -= geom.totalFrozenWidth - colRect.x;
-      } else if (colRect.x + colRect.width > sc.clientWidth) {
-        sc.scrollLeft += colRect.x + colRect.width - sc.clientWidth;
-      }
-    }
-  }, []);
-
-  const scrollTo = useCallback((options: { top?: number; left?: number; behavior?: ScrollBehavior }) => {
-    const sc = scrollContainerRef.current;
-    const nextTop = options.top ?? sc?.scrollTop ?? scrollPosRef.current.top;
-    const nextLeft = options.left ?? sc?.scrollLeft ?? scrollPosRef.current.left;
-    scrollPosRef.current = { top: nextTop, left: nextLeft };
-    if (sc) {
-      if (options.behavior === 'smooth') {
-        sc.scrollTo({
-          top: nextTop,
-          left: nextLeft,
-          behavior: 'smooth',
-        });
-      } else {
-        sc.scrollTop = nextTop;
-        sc.scrollLeft = nextLeft;
-      }
-    }
-    onScrollChange?.(scrollPosRef.current);
-    onRequestRender?.();
+const scrollTo = useCallback((options: { top?: number; left?: number; behavior?: ScrollBehavior }) => {
+  const sc = scrollContainerRef.current;
+const nextTop = options.top ?? sc?.scrollTop ?? scrollPosRef.current.top;
+const nextLeft = options.left ?? sc?.scrollLeft ?? scrollPosRef.current.left;
+scrollPosRef.current = { top: nextTop, left: nextLeft };
+if (sc) {
+  if (options.behavior === 'smooth') {
+    sc.scrollTo({
+      top: nextTop,
+      left: nextLeft,
+      behavior: 'smooth',
+    });
+  } else {
+    sc.scrollTop = nextTop;
+    sc.scrollLeft = nextLeft;
+  }
+}
+onScrollChange?.(scrollPosRef.current);
+onRequestRender?.();
   }, [onScrollChange, onRequestRender]);
 
-  const scrollToTop = useCallback(() => {
-    scrollTo({ top: 0, behavior: 'smooth' });
-  }, [scrollTo]);
+const scrollToTop = useCallback(() => {
+  scrollTo({ top: 0, behavior: 'smooth' });
+}, [scrollTo]);
 
-  const scrollToBottom = useCallback(() => {
-    const sc = scrollContainerRef.current;
-    if (sc) {
-      scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
-    }
-  }, [scrollTo]);
+const scrollToBottom = useCallback(() => {
+  const sc = scrollContainerRef.current;
+  if (sc) {
+    scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+  }
+}, [scrollTo]);
 
-  // 8. Viewport & Drag Edge Scrolling
-  const getViewportCoords = useCallback((e: React.MouseEvent): { x: number; y: number; onScrollbar: boolean } => {
-    const surface = gridSurfaceRef.current;
-    const sc = scrollContainerRef.current;
-    if (!surface) return { x: 0, y: 0, onScrollbar: false };
+// 8. Viewport & Drag Edge Scrolling
+const getViewportCoords = useCallback((e: React.MouseEvent): { x: number; y: number; onScrollbar: boolean } => {
+  const surface = gridSurfaceRef.current;
+  const sc = scrollContainerRef.current;
+  if (!surface) return { x: 0, y: 0, onScrollbar: false };
 
-    const rect = surface.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+  const rect = surface.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
 
-    const onScrollbar = Boolean(
-      sc && (x >= sc.clientWidth || y >= sc.clientHeight)
-    );
-    return { x, y, onScrollbar };
-  }, []);
+  const onScrollbar = Boolean(
+    sc && (x >= sc.clientWidth || y >= sc.clientHeight)
+  );
+  return { x, y, onScrollbar };
+}, []);
 
-  const checkEdgeAutoScroll = useCallback((x: number, y: number, rect: DOMRect) => {
-    const sc = scrollContainerRef.current;
-    if (!sc) return;
+const checkEdgeAutoScroll = useCallback((x: number, y: number, rect: DOMRect) => {
+  const sc = scrollContainerRef.current;
+  if (!sc) return;
 
-    const edgeThreshold = 36;
-    if (y > rect.height - edgeThreshold) {
-      sc.scrollTop += 18;
-    } else if (
-      y < geometryRef.current.headerHeight + edgeThreshold &&
-      y > geometryRef.current.headerHeight
-    ) {
-      sc.scrollTop = Math.max(0, sc.scrollTop - 18);
-    }
+  const edgeThreshold = 36;
+  if (y > rect.height - edgeThreshold) {
+    sc.scrollTop += 18;
+  } else if (
+    y < geometryRef.current.headerHeight + edgeThreshold &&
+    y > geometryRef.current.headerHeight
+  ) {
+    sc.scrollTop = Math.max(0, sc.scrollTop - 18);
+  }
 
-    if (x > rect.width - edgeThreshold) {
-      sc.scrollLeft += 24;
-    } else if (
-      x < geometryRef.current.totalFrozenWidth + edgeThreshold &&
-      x > geometryRef.current.totalFrozenWidth
-    ) {
-      sc.scrollLeft = Math.max(0, sc.scrollLeft - 24);
-    }
-  }, []);
+  if (x > rect.width - edgeThreshold) {
+    sc.scrollLeft += 24;
+  } else if (
+    x < geometryRef.current.totalFrozenWidth + edgeThreshold &&
+    x > geometryRef.current.totalFrozenWidth
+  ) {
+    sc.scrollLeft = Math.max(0, sc.scrollLeft - 24);
+  }
+}, []);
 
-  // 9. Dimension Queries
-  const getTotalWidth = useCallback((): number => {
-    return geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
-  }, []);
+// 9. Dimension Queries
+const getTotalWidth = useCallback((): number => {
+  return geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
+}, []);
 
-  const getTotalHeight = useCallback((count: number): number => {
-    return geometryRef.current.headerHeight + count * geometryRef.current.rowHeight;
-  }, []);
+const getTotalHeight = useCallback((count: number): number => {
+  return geometryRef.current.headerHeight + count * geometryRef.current.rowHeight;
+}, []);
 
-  return {
-    containerRef,
-    gridSurfaceRef,
-    scrollContainerRef,
-    geometryRef,
-    columns,
-    effectiveColumns,
-    setColumns,
-    updateColumnDef,
-    setColumnWidth,
-    getColumnWidth,
-    resizingCol,
-    setResizingCol,
-    scrollPosRef,
-    scrollIndicator,
-    setScrollIndicator,
-    handleScroll,
-    ensureCellVisible,
-    scrollTo,
-    scrollToTop,
-    scrollToBottom,
-    getViewportCoords,
-    checkEdgeAutoScroll,
-    getTotalWidth,
-    getTotalHeight,
-  };
+return {
+  containerRef,
+  gridSurfaceRef,
+  scrollContainerRef,
+  geometryRef,
+  columns,
+  effectiveColumns,
+  setColumns,
+  updateColumnDef,
+  setColumnWidth,
+  getColumnWidth,
+  resizingCol,
+  setResizingCol,
+  scrollPosRef,
+  scrollIndicator,
+  setScrollIndicator,
+  handleScroll,
+  ensureCellVisible,
+  scrollTo,
+  scrollToTop,
+  scrollToBottom,
+  getViewportCoords,
+  checkEdgeAutoScroll,
+  getTotalWidth,
+  getTotalHeight,
+};
 }

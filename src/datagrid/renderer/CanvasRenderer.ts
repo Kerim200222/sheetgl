@@ -288,10 +288,10 @@ export class CanvasRenderer {
             ? 'rgba(10, 132, 255, 0.22)'
             : 'rgba(0, 122, 255, 0.12)'
           : isZebraRow
-            ? theme.isDark
-              ? '#202124'
-              : '#EEF2F7'
-            : theme.canvas.rowNumberBg;
+          ? theme.isDark
+            ? '#202124'
+            : '#EEF2F7'
+          : theme.canvas.rowNumberBg;
         ctx.fillRect(0, rowY, rowNumW, rowH);
 
         // Inserted row left indicator bar
@@ -669,12 +669,12 @@ export class CanvasRenderer {
     // Column type plugin paint (with optional theme-aware columnText override)
     const effectiveTheme = colStyle?.columnText
       ? {
-          ...theme,
-          canvas: {
-            ...theme.canvas,
-            cellText: colStyle.columnText,
-          },
-        }
+        ...theme,
+        canvas: {
+          ...theme.canvas,
+          cellText: colStyle.columnText,
+        },
+      }
       : theme;
     const plugin = ColumnTypeRegistry.get(col.type);
     plugin.paint({
@@ -1233,12 +1233,12 @@ export class CanvasRenderer {
       ctx.fillStyle = isFilterActive
         ? '#FFFFFF'
         : isFilterHovered
-        ? colStyle?.headerText || theme.canvas.headerText
-        : colStyle?.headerText
-        ? colStyle.headerText
-        : theme.isDark
-        ? '#98989D'
-        : '#8E8E93';
+          ? colStyle?.headerText || theme.canvas.headerText
+          : colStyle?.headerText
+            ? colStyle.headerText
+            : theme.isDark
+              ? '#98989D'
+              : '#8E8E93';
       if (!isFilterActive && !isFilterHovered && colStyle?.headerText) {
         ctx.globalAlpha = 0.72;
       }

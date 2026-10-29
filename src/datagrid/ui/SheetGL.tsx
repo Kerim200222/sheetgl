@@ -1140,16 +1140,22 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         return;
       }
 
-      // Validate all items against column validationRules & validator
+      // Validate all items against column validationRules & validator in parallel
       const isTR = currentLocale.code.startsWith('tr');
       const validatedUpdates: typeof allowedUpdates = [];
       let firstErrorMsg: string | null = null;
       let rejectedCount = 0;
 
-      for (const u of allowedUpdates) {
-        const valRes = await ValidationEngine.validateCell(u.newValue, u.rowData, u.colDef, isTR);
+      const validationResults = await Promise.all(
+        allowedUpdates.map(async (u) => {
+          const valRes = await ValidationEngine.validateCell(u.newValue, u.rowData, u.colDef, isTR);
+          return { update: u, valRes };
+        })
+      );
+
+      for (const { update, valRes } of validationResults) {
         if (valRes.valid) {
-          validatedUpdates.push(u);
+          validatedUpdates.push(update);
         } else {
           rejectedCount++;
           if (!firstErrorMsg) {
@@ -1194,9 +1200,13 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         }
       }
 
-      // Also trigger cascading setCellValue for updated rows if any column defines setCellValue
+      // Trigger onCellChange once per updated column to prevent hundreds of sequential state updates
+      const touchedCols = new Set<string>();
       for (const u of validatedUpdates) {
-        onCellChange?.(u.rowData, u.colDef.id, u.newValue);
+        if (!touchedCols.has(u.colDef.id)) {
+          touchedCols.add(u.colDef.id);
+          onCellChange?.(u.rowData, u.colDef.id, u.newValue);
+        }
         if (u.colDef.setCellValue) {
           const draft: Record<string, any> = {};
           const res = u.colDef.setCellValue(draft, u.newValue, u.rowData, {
