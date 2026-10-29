@@ -99,6 +99,8 @@ export interface SheetGLProps {
   storageKey?: string;
   /** Callback fired when viewport scroll position changes */
   onScrollChange?: (pos: { top: number; left: number }) => void;
+  /** Custom export callback (e.g. for Excel export modal or custom export pipeline) */
+  onExport?: () => void;
 
   /** Navigation direction when Enter key commits cell edit: 'down' | 'right' | 'auto' (default: 'auto' which moves right on inserted rows and down on existing rows) */
   enterNavigation?: 'down' | 'right' | 'auto';
@@ -216,6 +218,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onColumnResize,
     storageKey,
     onScrollChange,
+    onExport,
     style,
     className,
   },
@@ -3215,7 +3218,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           setStoreVersion((v) => v + 1);
           requestRender();
         }}
-        onExportCsv={exportCsv}
+        onExportCsv={onExport || exportCsv}
         groups={groups.map((g) => g.selector)}
         onToggleGroupColumn={handleToggleGroupColumn}
         onExpandAllGroups={() => {
