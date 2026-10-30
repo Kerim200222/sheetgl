@@ -14,7 +14,6 @@ export interface UseGridGeometryOptions {
   storageKey?: string;
   hiddenColumns?: string[] | Set<string>;
   columnOrder?: string[];
-  onColumnOrderChange?: (newOrder: string[], reorderedColumns?: ColumnDef[]) => void;
   onColumnVisibilityChange?: (columnId: string, visible: boolean, hiddenColumns: string[]) => void;
   onRequestRender?: () => void;
   onActiveOverlayClear?: () => void;
@@ -479,9 +478,10 @@ export function useGridGeometry({
   const setColumnOrder = useCallback((newOrder: string[]) => {
     setInternalColumnOrder(newOrder);
     setCustomColumnOrder(newOrder);
-    onColumnOrderChange?.(newOrder);
+    const reorderedCols = ColumnManager.applyColumnOrder(columns, newOrder);
+    onColumnOrderChange?.(newOrder, reorderedCols);
     onRequestRender?.();
-  }, [onColumnOrderChange, onRequestRender]);
+  }, [columns, onColumnOrderChange, onRequestRender]);
 
   const moveColumn = useCallback(
     (sourceColId: string, targetColId: string, position: 'before' | 'after' = 'before') => {
@@ -501,7 +501,8 @@ export function useGridGeometry({
 
         currentOrder.splice(tgtIndex, 0, sourceColId);
         setCustomColumnOrder(currentOrder);
-        onColumnOrderChange?.(currentOrder);
+        const reorderedCols = ColumnManager.applyColumnOrder(columns, currentOrder);
+        onColumnOrderChange?.(currentOrder, reorderedCols);
         onRequestRender?.();
         return currentOrder;
       });
