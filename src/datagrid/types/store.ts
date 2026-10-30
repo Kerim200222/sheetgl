@@ -57,6 +57,8 @@ export interface IReadableStore {
   ensureRange(startRow: number, endRow: number): Promise<void>;
   on(event: 'loading' | 'loaded' | 'error', callback: (...args: any[]) => void): void;
   off(event: 'loading' | 'loaded' | 'error', callback: (...args: any[]) => void): void;
+  /** Subscribe to store updates / async data block arrivals */
+  subscribe?(callback: () => void): () => void;
 }
 
 export interface IFilterableStore {

@@ -40,6 +40,7 @@ export class LocalDataStore implements IDataStore {
   private cachedSummaries: Record<string, number> | null = null;
 
   private listeners = new Map<string, Set<(...args: any[]) => void>>();
+  private subscribers = new Set<() => void>();
 
   constructor(options: LocalDataStoreOptions) {
     this.keyField = options.keyField || 'id';
@@ -850,9 +851,21 @@ export class LocalDataStore implements IDataStore {
   public off(event: string, callback: (...args: any[]) => void): void {
     this.listeners.get(event)?.delete(callback);
   }
+  public subscribe(callback: () => void): () => void {
+    this.subscribers.add(callback);
+    return () => {
+      this.subscribers.delete(callback);
+    };
+  }
+
 
   private emit(event: string, ...args: any[]): void {
     this.listeners.get(event)?.forEach((cb) => cb(...args));
+    if (event === 'loaded') {
+      this.subscribers.forEach((cb) => {
+        try { cb(); } catch (e) { console.error(e); }
+      });
+    }
   }
 
   private recompute(): void {

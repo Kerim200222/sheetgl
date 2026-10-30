@@ -106,3 +106,11 @@ export type {
   CellCommitDirection,
   CellEditorComponent,
 } from './editing';
+
+export type {
+  IServerSideGetRowsRequest,
+  IServerSideGetRowsParams,
+  IDatasource,
+  ServerSideStoreOptions,
+} from './types/ssrm';
+export { ServerSideRowStore } from './store/ServerSideRowStore';
