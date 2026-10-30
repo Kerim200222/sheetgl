@@ -92,6 +92,9 @@ export { PdfColumnPlugin } from './columns/types/PdfColumn';
 export { PdfPreviewModalOverlay } from './overlays/PdfPreviewModalOverlay';
 export type { PdfPreviewModalState, PdfPreviewModalOverlayProps } from './overlays/PdfPreviewModalOverlay';
 export { normalizeMultiValue } from './columns/types/MultiSelectColumn/MultiSelectPainter';
+export { DetailPanelOverlay } from './renderer/masterdetail/DetailPanelOverlay';
+export type { DetailPanelOverlayProps } from './renderer/masterdetail/DetailPanelOverlay';
+export type { MasterDetailTemplate } from './types/grid';
 
 export { useGridEditing } from './hooks/useGridEditing';
 export type {
