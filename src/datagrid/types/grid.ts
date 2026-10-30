@@ -578,3 +578,9 @@ export interface ColumnDragState {
   dropPosition: 'before' | 'after';
   dropIndicatorX?: number | null;
 }
+
+/**
+ * Custom React template callback for Master-Detail row drawer rendering.
+ */
+export type MasterDetailTemplate = (rowData: any, rowIndex?: number) => React.ReactNode;
+
