@@ -106,3 +106,12 @@ export type {
   CellCommitDirection,
   CellEditorComponent,
 } from './editing';
+
+export { RowGroupingEngine, isGroupRow } from './utils/grouping/RowGroupingEngine';
+export type {
+  GroupRowMetadata,
+  GroupedRow,
+  GroupAggregation,
+  RowGroupingConfig,
+  GroupNode,
+} from './utils/grouping/RowGroupingEngine';
