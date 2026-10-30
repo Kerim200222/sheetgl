@@ -724,6 +724,46 @@ export class CanvasRenderer {
     ctx.stroke();
   }
 
+  /**
+   * Draws a pixel-crisp Google Material Symbols style lock icon (11x12 px) on HTML5 Canvas.
+   */
+  public static drawGoogleLockIcon(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    centerY: number,
+    color: string
+  ): void {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    const iconTop = centerY - 5.5;
+    const bodyW = 9.5;
+    const bodyH = 6.5;
+    const bodyX = x + 0.5;
+    const bodyY = iconTop + 4.5;
+    const centerX = x + 5.25;
+    // 1. Shackle (Google Material rounded arch)
+    ctx.lineWidth = 1.35;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(centerX, iconTop + 2.8, 2.7, Math.PI, 0, false);
+    ctx.lineTo(centerX + 2.7, bodyY + 0.5);
+    ctx.moveTo(centerX - 2.7, iconTop + 2.8);
+    ctx.lineTo(centerX - 2.7, bodyY + 0.5);
+    ctx.stroke();
+    // 2. Padlock Body
+    ctx.beginPath();
+    ctx.roundRect(bodyX, bodyY, bodyW, bodyH, 1.8);
+    ctx.fill();
+    // 3. Keyhole cutout (Google Material style)
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(centerX, bodyY + 2.3, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(centerX - 0.5, bodyY + 2.3, 1.0, 1.7);
+    ctx.restore();
+  }
+
   private static renderHeaders(
     ctx: CanvasRenderingContext2D,
     geometry: GeometryEngine,
@@ -1190,9 +1230,14 @@ export class CanvasRenderer {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
 
-    const prefix = isReadonly && col.type !== 'action' && col.type !== 'sparkline' ? '🔒 ' : '';
+    let titleX = x + 8;
+    if (isReadonly && col.type !== 'action' && col.type !== 'sparkline') {
+      const lockColor = colStyle?.headerAccent || (theme.isDark ? '#fbbf24' : '#d97706');
+      CanvasRenderer.drawGoogleLockIcon(ctx, titleX, y + h / 2, lockColor);
+      titleX += 14;
+    }
     const safeTitle = typeof col.title === 'string' && col.title.trim() !== '' ? col.title : (col.id === 'constructor' ? 'Constructor' : String(col.id || ''));
-    ctx.fillText(`${prefix}${safeTitle}`, x + 8, y + h / 2);
+    ctx.fillText(safeTitle, titleX, y + h / 2);
     ctx.restore();
 
     // Sort Arrow

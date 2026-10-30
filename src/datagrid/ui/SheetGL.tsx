@@ -842,8 +842,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         if (!silent) {
           showToast(
             currentLocale.code.startsWith('tr')
-              ? '🔒 Tablo şu anda Salt Okunur (Read-Only) modunda.'
-              : '🔒 Grid is currently in Read-Only permission mode.',
+              ? 'Tablo şu anda Salt Okunur (Read-Only) modunda.'
+              : 'Grid is currently in Read-Only permission mode.',
             'warning'
           );
         }
@@ -854,8 +854,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         if (!silent) {
           showToast(
             currentLocale.code.startsWith('tr')
-              ? `🔒 "${colDef.title}" sütunu salt okunurdur (Read-Only).`
-              : `🔒 Column "${colDef.title}" is Read-Only.`,
+              ? `"${colDef.title}" sütunu salt okunurdur (Read-Only).`
+              : `Column "${colDef.title}" is Read-Only.`,
             'warning'
           );
         }
@@ -866,8 +866,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         if (!silent) {
           showToast(
             currentLocale.code.startsWith('tr')
-              ? `🔒 Bu satır için "${colDef.title}" düzenlenemez.`
-              : `🔒 "${colDef.title}" is locked for this record.`,
+              ? `Bu satır için "${colDef.title}" düzenlenemez.`
+              : `"${colDef.title}" is locked for this record.`,
             'warning'
           );
         }
@@ -889,8 +889,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         if (evt.cancel) {
           showToast(
             currentLocale.code.startsWith('tr')
-              ? `🔒 Düzenleme onEditingStart kuralı tarafından engellendi.`
-              : `🔒 Editing canceled by onEditingStart trigger.`,
+              ? `Düzenleme onEditingStart kuralı tarafından engellendi.`
+              : `Editing canceled by onEditingStart trigger.`,
             'warning'
           );
           return false;
@@ -1129,8 +1129,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       if (allowedUpdates.length === 0) {
         showToast(
           currentLocale.code.startsWith('tr')
-            ? '🔒 Seçili hücreler salt okunur (Read-Only).'
-            : '🔒 Target cells are Read-Only.',
+            ? 'Seçili hücreler salt okunur (Read-Only).'
+            : 'Target cells are Read-Only.',
           'warning'
         );
         return;
@@ -1266,8 +1266,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       ) {
         showToast(
           currentLocale.code.startsWith('tr')
-            ? '🔒 Yeni satır ekleme yetkiniz kapalı.'
-            : '🔒 Row insertion is disabled by permissions.',
+            ? 'Yeni satır ekleme yetkiniz kapalı.'
+            : 'Row insertion is disabled by permissions.',
           'warning'
         );
         return;
@@ -1339,8 +1339,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       ) {
         showToast(
           currentLocale.code.startsWith('tr')
-            ? '🔒 Satır çoğaltma yetkisi kapalı.'
-            : '🔒 Row duplication is disabled by permissions.',
+            ? 'Satır çoğaltma yetkisi kapalı.'
+            : 'Row duplication is disabled by permissions.',
           'warning'
         );
         return;
@@ -1391,8 +1391,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       ) {
         showToast(
           currentLocale.code.startsWith('tr')
-            ? '🔒 Satır silme yetkisi kapalı.'
-            : '🔒 Row deletion is disabled by permissions.',
+            ? 'Satır silme yetkisi kapalı.'
+            : 'Row deletion is disabled by permissions.',
           'warning'
         );
         return;
@@ -2791,8 +2791,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       ) {
         showToast(
           currentLocale.code.startsWith('tr')
-            ? '🔒 Panodan yapıştırma yetkisi kapalı.'
-            : '🔒 Clipboard paste is disabled by permissions.',
+            ? 'Panodan yapıştırma yetkisi kapalı.'
+            : 'Clipboard paste is disabled by permissions.',
           'warning'
         );
         return;
@@ -3496,7 +3496,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               pointerEvents: 'none',
             }}
           >
-            {toastMessage.text}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{toastMessage.type === "warning" && <MaterialIcon name="lock" size={13} color="#FFFFFF" />}<span>{toastMessage.text}</span></span>
           </div>
         )}
 
