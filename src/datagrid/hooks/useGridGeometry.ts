@@ -266,7 +266,7 @@ export function useGridGeometry({
     if (sc) {
       const totalW = geometryRef.current.totalLeftPinnedWidth + geometryRef.current.totalCenterWidth + geometryRef.current.totalRightPinnedWidth + 18;
       const maxLeft = Math.max(0, totalW - sc.clientWidth);
-      const totalH = geometryRef.current.headerHeight + rowCount * geometryRef.current.rowHeight + 18;
+      const totalH = geometryRef.current.getTotalHeight(rowCount) + 18;
       const maxTop = Math.max(0, totalH - sc.clientHeight);
 
       let nextLeft = sc.scrollLeft;
@@ -314,7 +314,7 @@ export function useGridGeometry({
           if (!domSc) return;
           const domTotalW = geometryRef.current.totalLeftPinnedWidth + geometryRef.current.totalCenterWidth + geometryRef.current.totalRightPinnedWidth + 18;
           const domMaxLeft = Math.max(0, domTotalW - domSc.clientWidth);
-          const domTotalH = geometryRef.current.headerHeight + rowCount * geometryRef.current.rowHeight + 18;
+          const domTotalH = geometryRef.current.getTotalHeight(rowCount) + 18;
           const domMaxTop = Math.max(0, domTotalH - domSc.clientHeight);
 
           if (hasScrollableCols && Math.abs(domSc.scrollLeft - scrollPosRef.current.left) > 1) {
@@ -583,7 +583,7 @@ export function useGridGeometry({
     };
     const topRow = Math.max(
       1,
-      Math.floor(effectiveTop / geometryRef.current.rowHeight) + 1
+      geometryRef.current.findRowIndexAtY(effectiveTop) + 1
     );
     if (!scrollIndicatorStateRef.current.visible || scrollIndicatorStateRef.current.row !== topRow) {
       scrollIndicatorStateRef.current = { visible: true, row: topRow };
@@ -614,8 +614,9 @@ export function useGridGeometry({
     const sc = scrollContainerRef.current;
     if (!sc) return;
 
-    const cellTop = geom.headerHeight + row * geom.rowHeight;
-    const cellBottom = cellTop + geom.rowHeight;
+    const rowRect = geom.getRowScreenRect(row, 0);
+    const cellTop = rowRect.y;
+    const cellBottom = cellTop + rowRect.height;
 
     if (cellTop < sc.scrollTop + geom.headerHeight) {
       sc.scrollTop = cellTop - geom.headerHeight;
@@ -731,7 +732,7 @@ export function useGridGeometry({
   }, []);
 
   const getTotalHeight = useCallback((count: number): number => {
-    return geometryRef.current.headerHeight + count * geometryRef.current.rowHeight;
+    return geometryRef.current.getTotalHeight(count);
   }, []);
 
   return {
