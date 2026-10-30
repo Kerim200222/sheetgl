@@ -1,4 +1,7 @@
 import { ColumnDef, ColumnGroupDef } from '../types/grid';
+import { IDataStore } from '../types/store';
+import { IGridThemeTokens } from '../theme/IGridTheme';
+import { ColumnManager, AutoSizeOptions } from './ColumnManager';
 import { SelectionModel } from './SelectionModel';
 
 export interface HitTestResult {
@@ -437,6 +440,76 @@ export class GeometryEngine {
     };
   }
 
+
+  public hitTestColumnDropTarget(
+    canvasX: number,
+    scrollLeft: number,
+    draggingColId: string
+  ): { targetColId: string; colIndex: number; position: 'before' | 'after'; indicatorX: number } | null {
+    if (this.columns.length === 0) return null;
+
+    // 1. Frozen Columns
+    let curFrozenX = this.rowNumberWidth;
+    for (let i = 0; i < this.frozenColumns.length; i++) {
+      const col = this.frozenColumns[i];
+      if (col.id === '__selection__') {
+        curFrozenX += col.width;
+        continue;
+      }
+      const w = col.width;
+      if (canvasX >= curFrozenX && canvasX <= curFrozenX + w) {
+        const midX = curFrozenX + w / 2;
+        const position = canvasX >= midX ? 'after' : 'before';
+        const indicatorX = position === 'after' ? curFrozenX + w : curFrozenX;
+        return {
+          targetColId: col.id,
+          colIndex: i,
+          position,
+          indicatorX,
+        };
+      }
+      curFrozenX += w;
+    }
+
+    // 2. Scrollable Columns
+    for (let j = 0; j < this.scrollableColumns.length; j++) {
+      const col = this.scrollableColumns[j];
+      if (col.id === '__selection__') continue;
+      const colIdx = this.frozenColumns.length + j;
+      const x = this.totalFrozenWidth + this.scrollableColOffsets[j] - scrollLeft;
+      const w = col.width;
+
+      if (canvasX >= x && canvasX <= x + w) {
+        const midX = x + w / 2;
+        const position = canvasX >= midX ? 'after' : 'before';
+        const indicatorX = position === 'after' ? x + w : x;
+        return {
+          targetColId: col.id,
+          colIndex: colIdx,
+          position,
+          indicatorX,
+        };
+      }
+    }
+
+    // 3. Past the rightmost scrollable column
+    if (this.scrollableColumns.length > 0) {
+      const lastIdx = this.scrollableColumns.length - 1;
+      const lastCol = this.scrollableColumns[lastIdx];
+      const lastX = this.totalFrozenWidth + this.scrollableColOffsets[lastIdx] - scrollLeft;
+      if (canvasX > lastX + lastCol.width) {
+        return {
+          targetColId: lastCol.id,
+          colIndex: this.frozenColumns.length + lastIdx,
+          position: 'after',
+          indicatorX: lastX + lastCol.width,
+        };
+      }
+    }
+
+    return null;
+  }
+
   public hitTestColumnResize(
     canvasX: number,
     canvasY: number,
@@ -484,5 +557,20 @@ export class GeometryEngine {
     }
 
     return null;
+  }
+
+  /**
+   * Calculates the mathematical best-fit width for a column based on header and cell contents.
+   */
+  public calculateBestFitWidth(
+    columnId: string,
+    store: IDataStore,
+    theme: IGridThemeTokens,
+    ctx?: CanvasRenderingContext2D | null,
+    options?: AutoSizeOptions
+  ): number {
+    const col = this.columns.find((c) => c.id === columnId);
+    if (!col) return 100;
+    return ColumnManager.calculateBestFitWidth(col, store, theme, ctx, options);
   }
 }

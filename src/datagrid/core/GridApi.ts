@@ -101,4 +101,43 @@ export interface GridApi {
    * Programmatically stop editing the active cell.
    */
   stopEditingCell?(cancel?: boolean): void;
+
+  // ============================================================================
+  // ADVANCED COLUMN OPERATIONS API
+  // ============================================================================
+
+  /**
+   * Set column visibility (hide or show a column by ID).
+   */
+  setColumnVisibility?(columnId: string, visible: boolean): void;
+
+  /**
+   * Get all currently hidden column IDs.
+   */
+  getHiddenColumns?(): string[];
+
+  /**
+   * Set the visual ordering of columns.
+   */
+  setColumnOrder?(order: string[]): void;
+
+  /**
+   * Get the current visual order of column IDs.
+   */
+  getColumnOrder?(): string[];
+
+  /**
+   * Move/reorder a column from one position to another.
+   */
+  moveColumn?(sourceColId: string, targetColId: string, position?: 'before' | 'after'): void;
+
+  /**
+   * Auto-size a column to mathematically best-fit its header and cell contents.
+   */
+  autoSizeColumn?(columnId: string): void;
+
+  /**
+   * Auto-size all visible columns to mathematically best-fit their contents.
+   */
+  autoSizeAllColumns?(): void;
 }

@@ -106,3 +106,6 @@ export type {
   CellCommitDirection,
   CellEditorComponent,
 } from './editing';
+
+export { ColumnManager } from './core/ColumnManager';
+export type { AutoSizeOptions } from './core/ColumnManager';

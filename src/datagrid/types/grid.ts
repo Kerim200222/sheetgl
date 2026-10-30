@@ -568,3 +568,11 @@ export interface GridSummaryConfig {
   items?: GridSummaryItemConfig[];
 }
 
+
+export interface ColumnDragState {
+  draggingColId: string | null;
+  dropTargetColId: string | null;
+  dragCurrentX: number;
+  dropPosition: 'before' | 'after';
+  dropIndicatorX?: number | null;
+}

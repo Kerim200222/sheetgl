@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { ColumnDef, ColumnGroupDef, RowSelectionMode } from '../types/grid';
 import { GeometryEngine } from '../core/GeometryEngine';
+import { ColumnManager } from '../core/ColumnManager';
 
 export interface UseGridGeometryOptions {
   userColumns: ColumnDef[];
@@ -10,6 +11,10 @@ export interface UseGridGeometryOptions {
   groupHeaderHeight?: number;
   rowSelectionMode?: RowSelectionMode;
   rowCount?: number;
+  hiddenColumns?: string[] | Set<string>;
+  columnOrder?: string[];
+  onColumnOrderChange?: (newOrder: string[]) => void;
+  onColumnVisibilityChange?: (columnId: string, visible: boolean, hiddenColumns: string[]) => void;
   onRequestRender?: () => void;
   onActiveOverlayClear?: () => void;
   onColumnResize?: (colId: string, newWidth: number) => void;
@@ -37,6 +42,16 @@ export interface UseGridGeometryReturn {
   updateColumnDef: (colId: string, patch: Partial<ColumnDef>) => void;
   setColumnWidth: (colId: string, width: number) => void;
   getColumnWidth: (colId: string) => number | undefined;
+  // Column Visibility & Order
+  hiddenColumns: Set<string>;
+  columnOrder: string[];
+  setHiddenColumns: React.Dispatch<React.SetStateAction<Set<string>>>;
+  setColumnOrder: (newOrder: string[]) => void;
+  setColumnVisibility: (colId: string, visible: boolean) => void;
+  hideColumn: (colId: string) => void;
+  showColumn: (colId: string) => void;
+  toggleColumnVisibility: (colId: string) => void;
+  moveColumn: (sourceColId: string, targetColId: string, position?: 'before' | 'after') => void;
 
   // Resizing state
   resizingCol: ColumnResizeState | null;
@@ -69,9 +84,13 @@ export function useGridGeometry({
   groupHeaderHeight = 30,
   rowSelectionMode = 'none',
   rowCount = 0,
+  hiddenColumns: userHiddenColumns,
+  columnOrder: userColumnOrder,
   onRequestRender,
   onActiveOverlayClear,
   onColumnResize,
+  onColumnOrderChange,
+  onColumnVisibilityChange,
   onScrollChange,
 }: UseGridGeometryOptions): UseGridGeometryReturn {
 
@@ -84,9 +103,46 @@ export function useGridGeometry({
     setColumns(userColumns);
   }
 
-  // Derived effective columns with checkbox selection column when selectionMode is active
+  // Hidden Columns state
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => {
+    const initialHidden = new Set<string>();
+    if (userHiddenColumns) {
+      const list = userHiddenColumns instanceof Set ? Array.from(userHiddenColumns) : userHiddenColumns;
+      list.forEach((id) => initialHidden.add(id));
+    }
+    userColumns.forEach((col) => {
+      if (col.visible === false) initialHidden.add(col.id);
+    });
+    return initialHidden;
+  });
+
+  // Column Order state
+  const [columnOrder, setInternalColumnOrder] = useState<string[]>(() => {
+    if (userColumnOrder && userColumnOrder.length > 0) return [...userColumnOrder];
+    return userColumns.map((c) => c.id);
+  });
+
+  useEffect(() => {
+    if (userHiddenColumns) {
+      const next = new Set<string>();
+      const list = userHiddenColumns instanceof Set ? Array.from(userHiddenColumns) : userHiddenColumns;
+      list.forEach((id) => next.add(id));
+      setHiddenColumns(next);
+    }
+  }, [userHiddenColumns]);
+
+  useEffect(() => {
+    if (userColumnOrder && userColumnOrder.length > 0) {
+      setInternalColumnOrder([...userColumnOrder]);
+    }
+  }, [userColumnOrder]);
+
+
+  // Derived effective columns with ordering, visibility filter, and selection column
   const effectiveColumns = useMemo<ColumnDef[]>(() => {
     const activeCols = prevUserColumns !== userColumns ? userColumns : columns;
+    const orderedCols = ColumnManager.applyColumnOrder(activeCols, columnOrder);
+    const visibleCols = ColumnManager.filterVisibleColumns(orderedCols, hiddenColumns);
     if (rowSelectionMode === 'single' || rowSelectionMode === 'multiple') {
       const selCol: ColumnDef = {
         id: '__selection__',
@@ -99,10 +155,10 @@ export function useGridGeometry({
         groupable: false,
         readonly: true,
       };
-      return [selCol, ...activeCols.filter((c) => c.id !== '__selection__')];
+      return [selCol, ...visibleCols.filter((c) => c.id !== '__selection__')];
     }
-    return activeCols;
-  }, [columns, userColumns, prevUserColumns, rowSelectionMode]);
+    return visibleCols;
+  }, [columns, userColumns, prevUserColumns, rowSelectionMode, columnOrder, hiddenColumns]);
 
   // 2. Geometry Engine reference
   const geometryRef = useRef<GeometryEngine>(
@@ -212,6 +268,74 @@ export function useGridGeometry({
   const getColumnWidth = useCallback((colId: string): number | undefined => {
     return geometryRef.current.columns.find((c) => c.id === colId)?.width;
   }, []);
+
+    const setColumnOrder = useCallback((newOrder: string[]) => {
+    setInternalColumnOrder(newOrder);
+    onColumnOrderChange?.(newOrder);
+    onRequestRender?.();
+  }, [onColumnOrderChange, onRequestRender]);
+
+  const moveColumn = useCallback(
+    (sourceColId: string, targetColId: string, position: 'before' | 'after' = 'before') => {
+      if (sourceColId === targetColId) return;
+      setInternalColumnOrder((prevOrder) => {
+        const currentOrder = prevOrder.length > 0 ? [...prevOrder] : columns.map((c) => c.id);
+        const srcIndex = currentOrder.indexOf(sourceColId);
+        if (srcIndex === -1) return prevOrder;
+
+        currentOrder.splice(srcIndex, 1);
+        let tgtIndex = currentOrder.indexOf(targetColId);
+        if (tgtIndex === -1) return prevOrder;
+
+        if (position === 'after') {
+          tgtIndex += 1;
+        }
+
+        currentOrder.splice(tgtIndex, 0, sourceColId);
+        onColumnOrderChange?.(currentOrder);
+        onRequestRender?.();
+        return currentOrder;
+      });
+    },
+    [columns, onColumnOrderChange, onRequestRender]
+  );
+
+  const setColumnVisibility = useCallback((colId: string, visible: boolean) => {
+    setHiddenColumns((prev) => {
+      const next = new Set(prev);
+      if (visible) {
+        next.delete(colId);
+      } else {
+        next.add(colId);
+      }
+      onColumnVisibilityChange?.(colId, visible, Array.from(next));
+      onRequestRender?.();
+      return next;
+    });
+  }, [onColumnVisibilityChange, onRequestRender]);
+
+  const hideColumn = useCallback((colId: string) => {
+    setColumnVisibility(colId, false);
+  }, [setColumnVisibility]);
+
+  const showColumn = useCallback((colId: string) => {
+    setColumnVisibility(colId, true);
+  }, [setColumnVisibility]);
+
+  const toggleColumnVisibility = useCallback((colId: string) => {
+    setHiddenColumns((prev) => {
+      const next = new Set(prev);
+      const isVisible = next.has(colId);
+      if (isVisible) {
+        next.delete(colId);
+      } else {
+        next.add(colId);
+      }
+      onColumnVisibilityChange?.(colId, !isVisible, Array.from(next));
+      onRequestRender?.();
+      return next;
+    });
+  }, [onColumnVisibilityChange, onRequestRender]);
 
   // 7. Scroll Handlers
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -362,6 +486,15 @@ return {
   updateColumnDef,
   setColumnWidth,
   getColumnWidth,
+  hiddenColumns,
+  columnOrder,
+  setHiddenColumns,
+  setColumnOrder,
+  setColumnVisibility,
+  hideColumn,
+  showColumn,
+  toggleColumnVisibility,
+  moveColumn,
   resizingCol,
   setResizingCol,
   scrollPosRef,
