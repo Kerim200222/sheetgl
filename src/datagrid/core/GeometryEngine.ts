@@ -23,6 +23,7 @@ export interface HeaderHitTestResult {
 
 export class GeometryEngine {
   public rowHeight: number = 34;
+  public defaultRowHeight: number = 34;
   public baseHeaderHeight: number = 38;
   public groupHeaderHeight: number = 30;
   public headerHeight: number = 38;
@@ -39,6 +40,12 @@ export class GeometryEngine {
   public totalScrollableWidth: number = 0;
   public scrollableColOffsets: Float32Array = new Float32Array(0);
 
+  // Dynamic Variable Row Heights & Cumulative Offsets
+  public rowCount: number = 0;
+  public rowOffsets: Float64Array = new Float64Array(0);
+  private customRowHeights: Map<number, number> = new Map();
+  private offsetsValid: boolean = false;
+
   constructor(
     columns: ColumnDef[] = [],
     rowHeight: number = 34,
@@ -46,7 +53,8 @@ export class GeometryEngine {
     columnGroups: ColumnGroupDef[] = [],
     groupHeaderHeight: number = 30
   ) {
-    this.rowHeight = rowHeight;
+    this.rowHeight = rowHeight || 34;
+    this.defaultRowHeight = this.rowHeight;
     this.baseHeaderHeight = headerHeight;
     this.groupHeaderHeight = groupHeaderHeight;
     this.headerHeight = headerHeight;
@@ -326,6 +334,154 @@ export class GeometryEngine {
     };
   }
 
+  // ============================================================================
+  // VARIABLE ROW HEIGHTS & OFFSETS ENGINE
+  // ============================================================================
+
+  /**
+   * Updates the height of a specific row and recalculates cumulative offsets.
+   */
+  public setRowHeight(rowIndex: number, height: number): void {
+    if (rowIndex < 0 || height <= 0) return;
+    if (height === this.rowHeight) {
+      this.customRowHeights.delete(rowIndex);
+    } else {
+      this.customRowHeights.set(rowIndex, height);
+    }
+    this.offsetsValid = false;
+    this.recalculateRowOffsets();
+  }
+
+  /**
+   * Returns the specific row's height. If not explicitly set, returns the default rowHeight.
+   */
+  public getRowHeight(rowIndex: number): number {
+    return this.customRowHeights.get(rowIndex) ?? this.rowHeight;
+  }
+
+  /**
+   * Clears all custom row heights and resets the offsets array.
+   */
+  public clearCustomRowHeights(): void {
+    this.customRowHeights.clear();
+    this.offsetsValid = false;
+    this.recalculateRowOffsets();
+  }
+
+  /**
+   * Returns a snapshot copy of all active custom row heights.
+   */
+  public getCustomRowHeights(): Map<number, number> {
+    return new Map(this.customRowHeights);
+  }
+
+  /**
+   * Recalculates the cumulative Y offsets prefix-sum array for all rows.
+   */
+  public recalculateRowOffsets(rowCount?: number): void {
+    if (rowCount !== undefined && rowCount >= 0) {
+      this.rowCount = rowCount;
+    }
+    const count = this.rowCount;
+    if (this.rowOffsets.length !== count + 1) {
+      this.rowOffsets = new Float64Array(count + 1);
+    }
+    let acc = 0;
+    const hasCustom = this.customRowHeights.size > 0;
+    const defaultH = this.rowHeight;
+
+    if (!hasCustom) {
+      for (let i = 0; i < count; i++) {
+        this.rowOffsets[i] = acc;
+        acc += defaultH;
+      }
+    } else {
+      for (let i = 0; i < count; i++) {
+        this.rowOffsets[i] = acc;
+        acc += this.customRowHeights.get(i) ?? defaultH;
+      }
+    }
+    this.rowOffsets[count] = acc;
+    this.offsetsValid = true;
+  }
+
+  /**
+   * Returns the cumulative Y offset (distance from top of rows area) for a row index.
+   */
+  public getRowOffset(rowIndex: number): number {
+    if (rowIndex <= 0) return 0;
+    if (!this.offsetsValid || rowIndex >= this.rowOffsets.length) {
+      this.recalculateRowOffsets(Math.max(this.rowCount, rowIndex + 1));
+    }
+    if (rowIndex < this.rowOffsets.length) {
+      return this.rowOffsets[rowIndex];
+    }
+    return rowIndex * this.rowHeight;
+  }
+
+  /**
+   * Returns the total sum of all row heights (the last value in the offsets array).
+   */
+  public getTotalHeight(rowCount?: number): number {
+    if (rowCount !== undefined && (rowCount !== this.rowCount || !this.offsetsValid)) {
+      this.recalculateRowOffsets(rowCount);
+    } else if (!this.offsetsValid) {
+      this.recalculateRowOffsets();
+    }
+    if (this.rowOffsets.length === 0) {
+      return (rowCount ?? this.rowCount) * this.rowHeight;
+    }
+    return this.rowOffsets[this.rowCount];
+  }
+
+  /**
+   * Calculates the screen-space Y coordinate and height for a row based on cumulative offset minus scrollTop.
+   */
+  public getRowScreenRect(
+    rowIndex: number,
+    scrollTop: number = 0
+  ): { y: number; height: number } {
+    const y = this.headerHeight + this.getRowOffset(rowIndex) - scrollTop;
+    const height = this.getRowHeight(rowIndex);
+    return { y, height };
+  }
+
+  /**
+   * Binary searches (O(log N)) over cumulative row offsets to find the row index at a given virtual Y coordinate.
+   */
+  public findRowIndexAtY(virtualY: number, rowCount?: number): number {
+    if (rowCount !== undefined && (rowCount !== this.rowCount || !this.offsetsValid)) {
+      this.recalculateRowOffsets(rowCount);
+    } else if (!this.offsetsValid) {
+      this.recalculateRowOffsets();
+    }
+
+    const count = this.rowCount;
+    if (count <= 0 || virtualY <= 0) return 0;
+
+    // Fast-path: uniform heights without custom entries
+    if (this.customRowHeights.size === 0 && this.rowHeight > 0) {
+      const idx = Math.floor(virtualY / this.rowHeight);
+      return Math.min(Math.max(0, idx), count - 1);
+    }
+
+    let low = 0;
+    let high = count - 1;
+    while (low <= high) {
+      const mid = (low + high) >>> 1;
+      const start = this.rowOffsets[mid];
+      const end = this.rowOffsets[mid + 1];
+      if (virtualY >= start && virtualY < end) {
+        return mid;
+      } else if (virtualY < start) {
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+    return Math.min(Math.max(0, low), count - 1);
+  }
+
   public hitTestRowNumber(
     canvasX: number,
     canvasY: number,
@@ -336,7 +492,7 @@ export class GeometryEngine {
       return null;
     }
     const virtualY = canvasY - this.headerHeight + scrollTop;
-    const row = Math.floor(virtualY / this.rowHeight);
+    const row = this.findRowIndexAtY(virtualY, rowCount);
     if (row < 0 || row >= rowCount) return null;
     return row;
   }
@@ -351,8 +507,10 @@ export class GeometryEngine {
     if (canvasY <= this.headerHeight || canvasX <= this.rowNumberWidth) return null;
 
     const norm = selection.getNormalizedRange();
-    const rTopY = this.headerHeight + norm.minRow * this.rowHeight - scrollTop;
-    const rHeight = (norm.maxRow - norm.minRow + 1) * this.rowHeight;
+    const rTopRect = this.getRowScreenRect(norm.minRow, scrollTop);
+    const rBottomRect = this.getRowScreenRect(norm.maxRow, scrollTop);
+    const rTopY = rTopRect.y;
+    const rHeight = rBottomRect.y + rBottomRect.height - rTopRect.y;
     const leftColRect = this.getColumnScreenRect(norm.minCol, scrollLeft);
     const rightColRect = this.getColumnScreenRect(norm.maxCol, scrollLeft);
 
@@ -390,10 +548,12 @@ export class GeometryEngine {
     }
 
     const virtualY = canvasY - this.headerHeight + scrollTop;
-    const row = Math.floor(virtualY / this.rowHeight);
+    const row = this.findRowIndexAtY(virtualY, rowCount);
     if (row < 0 || row >= rowCount) return null;
 
-    const cellScreenY = this.headerHeight + row * this.rowHeight - scrollTop;
+    const rowRect = this.getRowScreenRect(row, scrollTop);
+    const cellScreenY = rowRect.y;
+    const rowH = rowRect.height;
     const localY = canvasY - cellScreenY;
 
     // 1. Frozen Columns
@@ -408,7 +568,7 @@ export class GeometryEngine {
             localX: canvasX - curX,
             localY,
             isFrozen: true,
-            cellRect: { x: curX, y: cellScreenY, width: w, height: this.rowHeight },
+            cellRect: { x: curX, y: cellScreenY, width: w, height: rowH },
           };
         }
         curX += w;
@@ -433,7 +593,7 @@ export class GeometryEngine {
       localX: canvasX - cellScreenX,
       localY,
       isFrozen: false,
-      cellRect: { x: cellScreenX, y: cellScreenY, width, height: this.rowHeight },
+      cellRect: { x: cellScreenX, y: cellScreenY, width, height: rowH },
     };
   }
 

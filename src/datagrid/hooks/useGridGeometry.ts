@@ -222,7 +222,7 @@ export function useGridGeometry({
     };
     const topRow = Math.max(
       1,
-      Math.floor(target.scrollTop / geometryRef.current.rowHeight) + 1
+      geometryRef.current.findRowIndexAtY(target.scrollTop) + 1
     );
     if (!scrollIndicatorStateRef.current.visible || scrollIndicatorStateRef.current.row !== topRow) {
       scrollIndicatorStateRef.current = { visible: true, row: topRow };
@@ -251,8 +251,9 @@ const ensureCellVisible = useCallback((row: number, col: number) => {
   const sc = scrollContainerRef.current;
   if (!sc) return;
 
-  const cellTop = geom.headerHeight + row * geom.rowHeight;
-  const cellBottom = cellTop + geom.rowHeight;
+  const rowRect = geom.getRowScreenRect(row, 0);
+  const cellTop = rowRect.y;
+  const cellBottom = cellTop + rowRect.height;
 
   if (cellTop < sc.scrollTop + geom.headerHeight) {
     sc.scrollTop = cellTop - geom.headerHeight;
@@ -348,7 +349,7 @@ const getTotalWidth = useCallback((): number => {
 }, []);
 
 const getTotalHeight = useCallback((count: number): number => {
-  return geometryRef.current.headerHeight + count * geometryRef.current.rowHeight;
+  return geometryRef.current.headerHeight + geometryRef.current.getTotalHeight(count);
 }, []);
 
 return {
