@@ -3,6 +3,8 @@ import { ColumnDef } from '../types/grid';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
 
+import { useGridState } from '../state';
+
 export interface SparklineModalState {
   rowIndex: number;
   rowData: Record<string, any>;
@@ -12,17 +14,20 @@ export interface SparklineModalState {
 
 export interface SparklineModalOverlayProps {
   modal: SparklineModalState;
-  theme: IGridThemeTokens;
-  locale: IGridLocale;
+  theme?: IGridThemeTokens;
+  locale?: IGridLocale;
   onClose: () => void;
 }
 
 export const SparklineModalOverlay: React.FC<SparklineModalOverlayProps> = ({
   modal,
-  theme,
-  locale,
+  theme: propTheme,
+  locale: propLocale,
   onClose,
 }) => {
+  const gridState = useGridState();
+  const theme = propTheme ?? gridState.resolvedTheme;
+  const locale = propLocale ?? gridState.currentLocale;
   const isTR = locale.code.startsWith('tr');
   const [chartType, setChartType] = useState<'area' | 'bar'>('area');
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
