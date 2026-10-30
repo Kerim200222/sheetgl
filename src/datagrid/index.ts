@@ -124,3 +124,12 @@ export { ServerSideRowStore } from './store/ServerSideRowStore';
 
 export { ColumnManager } from './core/ColumnManager';
 export type { AutoSizeOptions } from './core/ColumnManager';
+
+export { RowGroupingEngine, isGroupRow } from './utils/grouping/RowGroupingEngine';
+export type {
+  GroupRowMetadata,
+  GroupedRow,
+  GroupAggregation,
+  RowGroupingConfig,
+  GroupNode,
+} from './utils/grouping/RowGroupingEngine';
