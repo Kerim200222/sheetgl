@@ -82,6 +82,8 @@ export class RemoteDataStore implements IDataStore {
 
   private currentAbortController: AbortController | null = null;
   private pendingBlockRequests = new Set<number>();
+  private scrollDebounceTimer: any = null;
+  private pendingTargetBlocks = new Set<number>();
   private distinctCache = new Map<string, DistinctItem[]>();
   private listeners = new Map<string, Set<(...args: any[]) => void>>();
 
@@ -176,7 +178,28 @@ export class RemoteDataStore implements IDataStore {
 
     if (missingBlocks.length === 0) return Promise.resolve();
 
-    return Promise.all(missingBlocks.map((b) => this.fetchBlock(b))).then(() => {});
+    if (!this.hasInitialFetchTriggered && missingBlocks.includes(0)) {
+      this.hasInitialFetchTriggered = true;
+      return this.fetchBlock(0);
+    }
+
+    this.pendingTargetBlocks.clear();
+    for (const b of missingBlocks) {
+      this.pendingTargetBlocks.add(b);
+    }
+
+    if (this.scrollDebounceTimer) {
+      clearTimeout(this.scrollDebounceTimer);
+    }
+
+    return new Promise<void>((resolve) => {
+      this.scrollDebounceTimer = setTimeout(() => {
+        this.scrollDebounceTimer = null;
+        const blocks = Array.from(this.pendingTargetBlocks);
+        this.pendingTargetBlocks.clear();
+        Promise.all(blocks.map((b) => this.fetchBlock(b))).then(() => resolve());
+      }, 160);
+    });
   }
 
   private buildRequestUrlWithParams(payload: Record<string, any>): string {
