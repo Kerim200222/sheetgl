@@ -6,6 +6,8 @@ import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { MaterialIcon } from '../ui/MaterialIcon';
 
+import { useGridState } from '../state';
+
 export interface ContextMenuState {
   targetType: 'cell' | 'header' | 'rownumber';
   x: number;
@@ -20,8 +22,8 @@ export interface ContextMenuOverlayProps {
   menu: ContextMenuState;
   viewportWidth: number;
   viewportHeight: number;
-  theme: IGridThemeTokens;
-  locale: IGridLocale;
+  theme?: IGridThemeTokens;
+  locale?: IGridLocale;
   permissions?: GridPermissions;
   isCellEditable: boolean;
   isGroupedByCol: boolean;
@@ -54,9 +56,9 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
   menu,
   viewportWidth,
   viewportHeight,
-  theme,
-  locale,
-  permissions,
+  theme: propTheme,
+  locale: propLocale,
+  permissions: propPermissions,
   isCellEditable,
   isGroupedByCol,
   currentSummaryType = 'none',
@@ -83,6 +85,11 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
   onExportCsv,
   onClose,
 }) => {
+  const gridState = useGridState();
+  const theme = propTheme ?? gridState.resolvedTheme;
+  const locale = propLocale ?? gridState.currentLocale;
+  const permissions = propPermissions ?? gridState.permissions;
+
   const menuRef = useRef<HTMLDivElement | null>(null);
   const isTR = locale.code.startsWith('tr');
 
