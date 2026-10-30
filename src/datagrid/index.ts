@@ -1,5 +1,4 @@
 export { SheetGL } from './ui/SheetGL';
-export { SHEETGL_VERSION } from './version';
 export type { SheetGLProps } from './ui/SheetGL';
 export { RowDetailDrawer } from './overlays/RowDetailDrawer';
 export type { MasterDetailConfig, RowDetailPanelProps, RowDetailDrawerProps } from './overlays/RowDetailDrawer';
@@ -127,7 +126,6 @@ export { ServerSideRowStore } from './store/ServerSideRowStore';
 
 export { ColumnManager } from './core/ColumnManager';
 export type { AutoSizeOptions } from './core/ColumnManager';
-
 export { RowGroupingEngine, isGroupRow } from './utils/grouping/RowGroupingEngine';
 export type {
   GroupRowMetadata,
@@ -136,3 +134,5 @@ export type {
   RowGroupingConfig,
   GroupNode,
 } from './utils/grouping/RowGroupingEngine';
+
+export * from './state';
