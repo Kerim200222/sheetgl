@@ -45,6 +45,7 @@ import { PdfPreviewModalOverlay, PdfPreviewModalState } from '../overlays/PdfPre
 import { BatchChangesModal } from '../overlays/BatchChangesModal';
 import { DeleteConfirmProgressModal } from '../overlays/DeleteConfirmProgressModal';
 import { RowDetailDrawer, MasterDetailConfig } from '../overlays/RowDetailDrawer';
+import { DetailPanelOverlay } from '../renderer/masterdetail/DetailPanelOverlay';
 import { ToolBar } from './ToolBar';
 import { FormulaBar } from './FormulaBar';
 import { SummaryFooter, SelectionSummaryStats } from './SummaryFooter';
@@ -174,6 +175,11 @@ export interface SheetGLProps {
   /** Callback fired when a group row is expanded or collapsed */
   onGroupExpansionChanged?: (expandedKeys: Set<string>) => void;
 
+  /** Custom React template to render in the expandable Master-Detail row drawer */
+  masterDetailTemplate?: (rowData: any, rowIndex?: number) => React.ReactNode;
+  /** Pixel height of the expanded Master-Detail row drawer (default: 160) */
+  detailRowHeight?: number;
+
   style?: React.CSSProperties;
   className?: string;
 }
@@ -290,6 +296,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     groupBy: userGroupBy,
     expandedGroupKeys: userExpandedGroupKeys,
     onGroupExpansionChanged,
+    masterDetailTemplate,
+    detailRowHeight = 160,
     style,
     className,
   },
@@ -737,6 +745,30 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     }
   }, [userSelectedRowKeys]);
 
+  // 4a. Master-Detail Expanded Rows State
+  const [expandedMasterRows, setExpandedMasterRows] = useState<Set<any>>(new Set());
+
+  const toggleMasterRow = useCallback(
+    (rowKey: any, rowIndex: number) => {
+      setExpandedMasterRows((prev) => {
+        const next = new Set(prev);
+        const geom = geometryRef.current;
+        const expHeight = geom.rowHeight + (detailRowHeight || 160);
+
+        if (next.has(rowKey)) {
+          next.delete(rowKey);
+          geom.setRowHeight(rowIndex, geom.rowHeight);
+        } else {
+          next.add(rowKey);
+          geom.setRowHeight(rowIndex, expHeight);
+        }
+        return next;
+      });
+      requestRenderRef.current();
+    },
+    [detailRowHeight]
+  );
+
   // 4b. Geometry & Layout Hook
   const {
     containerRef,
@@ -1105,6 +1137,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         zebraStriping: zebraStriping ?? rowAlternationEnabled ?? true,
         streamingEngine: streamingEngineRef.current,
         getRowStyle: getRowStyle || onRowPrepared ? effectiveGetRowStyle : undefined,
+        hasMasterDetail: Boolean(masterDetailTemplate),
+        expandedMasterRows,
       });
 
       // Keep RAF loop alive as long as there are active fading pulses
@@ -1128,6 +1162,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     getRowStyle,
     onRowPrepared,
     keyField,
+    masterDetailTemplate,
+    expandedMasterRows,
   ]);
 
   requestRenderRef.current = requestRender;
@@ -1322,7 +1358,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
   useEffect(() => {
     requestRender();
-  }, [requestRender, resolvedTheme, currentLocale, storeVersion, groupVersion, effectiveColumns, selectionVersion, rowSelectionMode, selectedRowKeysSet, effectiveStore]);
+  }, [requestRender, resolvedTheme, currentLocale, storeVersion, groupVersion, effectiveColumns, selectionVersion, rowSelectionMode, selectedRowKeysSet, effectiveStore, expandedMasterRows]);
 
   // 6c. PDF Preview Custom Event Listener
   useEffect(() => {
@@ -3123,9 +3159,19 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       }
     }
 
-    // E. Row Number Gutter Click (Select Full Row)
+    // E. Row Number Gutter Click (Select Full Row or Toggle Master-Detail Drawer)
     const rowNumHit = geom.hitTestRowNumber(x, y, st, rowCount);
     if (rowNumHit !== null && geom.columns.length > 0) {
+      if (masterDetailTemplate && x <= 26) {
+        const vr = store.getViewRow(rowNumHit);
+        if (vr && vr.type === 'data') {
+          const keyField = (store as any).getKeyField?.() || (store as any).keyField || 'id';
+          const rowKey = vr.data[keyField] ?? vr.data.id ?? vr.data.legacy_id ?? rowNumHit;
+          toggleMasterRow(rowKey, rowNumHit);
+          return;
+        }
+      }
+
       if (e.shiftKey) {
         selectionRef.current.setRangeEnd(rowNumHit, geom.columns.length - 1);
       } else {
@@ -4505,6 +4551,22 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>{toastMessage.type === "warning" && <MaterialIcon name="lock" size={13} color="#FFFFFF" />}<span>{toastMessage.text}</span></span>
           </div>
+        )}
+
+        {/* 3b. MASTER-DETAIL ROW EXPANDED DRAWERS OVERLAY */}
+        {masterDetailTemplate && (
+          <DetailPanelOverlay
+            expandedMasterRows={expandedMasterRows}
+            store={store}
+            geometry={geometryRef.current}
+            scrollTop={scrollPosRef.current.top}
+            scrollLeft={scrollPosRef.current.left}
+            viewportWidth={gridSurfaceRef.current?.clientWidth || 1200}
+            viewportHeight={gridSurfaceRef.current?.clientHeight || 600}
+            masterDetailTemplate={masterDetailTemplate}
+            theme={resolvedTheme}
+            detailRowHeight={detailRowHeight || 160}
+          />
         )}
 
         {/* 4. DYNAMIC MICRO-DOM CELL EDITOR */}
