@@ -14,8 +14,21 @@ export class SortEngine {
 
     return (a: any, b: any) => {
       for (const rule of sortRules) {
-        const valA = a?.[rule.selector];
-        const valB = b?.[rule.selector];
+        let valA = a?.[rule.selector];
+        let valB = b?.[rule.selector];
+
+        if (rule.selector === 'id') {
+          if (a?.legacy_id !== undefined && a?.legacy_id !== null && a?.legacy_id !== '') {
+            valA = Number(a.legacy_id);
+          } else if (typeof valA === 'string' && valA.includes('-') && a?.legacy_id) {
+            valA = Number(a.legacy_id);
+          }
+          if (b?.legacy_id !== undefined && b?.legacy_id !== null && b?.legacy_id !== '') {
+            valB = Number(b.legacy_id);
+          } else if (typeof valB === 'string' && valB.includes('-') && b?.legacy_id) {
+            valB = Number(b.legacy_id);
+          }
+        }
 
         const diff = this.compareValues(valA, valB);
         if (diff !== 0) {
