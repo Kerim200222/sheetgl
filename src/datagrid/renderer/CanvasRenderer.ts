@@ -36,6 +36,8 @@ export interface RenderParams {
   selectedRowKeys?: Set<any>;
   zebraStriping?: boolean | string | { light: string; dark: string };
   streamingEngine?: StreamingEngine | null;
+  hasMasterDetail?: boolean;
+  expandedMasterRows?: Set<any>;
 }
 
 export class CanvasRenderer {
@@ -68,6 +70,8 @@ export class CanvasRenderer {
       selectedRowKeys,
       zebraStriping = true,
       streamingEngine,
+      hasMasterDetail,
+      expandedMasterRows,
     } = params;
 
     const now = performance.now();
@@ -104,9 +108,9 @@ export class CanvasRenderer {
       const headerH = geometry.headerHeight;
       const rowNumW = geometry.rowNumberWidth;
 
-      // 2. Viewport Row Bounds
-      const startRow = Math.max(0, Math.floor(scrollTop / rowH));
-      const endRow = Math.min(rowCount - 1, Math.ceil((scrollTop + height - headerH) / rowH));
+      // 2. Viewport Row Bounds (variable row heights)
+      const startRow = geometry.findRowIndexAtY(scrollTop, rowCount);
+      const endRow = geometry.findRowIndexAtY(scrollTop + height - headerH, rowCount);
 
       if (rowCount > 0 && endRow >= startRow) {
         store.ensureRange(startRow, endRow);
@@ -149,7 +153,9 @@ export class CanvasRenderer {
       // SKELETONS & GROUP ROWS (Full Width Passes)
       // ========================================================================
       for (let r = startRow; r <= endRow; r++) {
-        const rowY = headerH + r * rowH - scrollTop;
+        const rowRect = geometry.getRowScreenRect(r, scrollTop);
+        const rowY = rowRect.y;
+        const totalRowH = rowRect.height;
         const vRow = store.getViewRow(r);
 
         const isSkeletonRow = !vRow || Boolean((vRow as any)?.data?.__isLoading || (vRow as any)?.__isLoading);
@@ -330,7 +336,8 @@ export class CanvasRenderer {
         if (!vRow || vRow.type !== 'data') continue;
 
         const rowData = vRow.data;
-        const rowKey = rowData.uuid ?? rowData.id ?? r;
+        const keyField = (store as any).getKeyField?.() || (store as any).keyField || 'id';
+        const rowKey = rowData[keyField] ?? rowData.uuid ?? rowData.id ?? rowData.legacy_id ?? r;
         const isRowInserted = store.isRowInserted?.(rowKey) ?? false;
         const isRowLoading = loadingRowKeys?.has(rowKey) ?? false;
         const isRowInActiveSel = r >= normSel.minRow && r <= normSel.maxRow;
@@ -393,7 +400,7 @@ export class CanvasRenderer {
             ? '#202124'
             : '#EEF2F7'
           : theme.canvas.rowNumberBg;
-        ctx.fillRect(0, rowY, rowNumW, rowH);
+        ctx.fillRect(0, rowY, rowNumW, totalRowH);
 
         if (isRowInserted) {
           ctx.fillStyle = '#30D158';
@@ -403,19 +410,39 @@ export class CanvasRenderer {
           ctx.fillRect(0, rowY, 4, rowH);
         }
 
-        ctx.fillStyle = isRowInActiveSel ? theme.dom.accentColor : theme.canvas.rowNumberText;
-        ctx.font = `${isRowInActiveSel ? '700' : '500'} ${theme.fontSize - 1}px ${theme.fontFamily}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(isRowLoading ? '⟳' : String(r + 1), rowNumW / 2, rowY + rowH / 2);
+        const isExpanded = expandedMasterRows?.has(rowKey) ?? false;
+
+        if (hasMasterDetail) {
+          // Draw [+] or [-] toggle indicator
+          const btnX = 12;
+          const btnY = rowY + rowH / 2;
+          ctx.fillStyle = theme.dom.accentColor || (theme.isDark ? '#0A84FF' : '#007AFF');
+          ctx.font = `700 13px ${theme.fontFamily}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(isExpanded ? '−' : '+', btnX, btnY);
+
+          // Draw row number text shifted right
+          ctx.fillStyle = isRowInActiveSel ? theme.dom.accentColor : theme.canvas.rowNumberText;
+          ctx.font = `${isRowInActiveSel ? '700' : '500'} ${theme.fontSize - 1}px ${theme.fontFamily}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(isRowLoading ? '⟳' : String(r + 1), (rowNumW + 14) / 2, rowY + rowH / 2);
+        } else {
+          ctx.fillStyle = isRowInActiveSel ? theme.dom.accentColor : theme.canvas.rowNumberText;
+          ctx.font = `${isRowInActiveSel ? '700' : '500'} ${theme.fontSize - 1}px ${theme.fontFamily}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(isRowLoading ? '⟳' : String(r + 1), rowNumW / 2, rowY + rowH / 2);
+        }
 
         // Row number border
         ctx.strokeStyle = theme.canvas.rowNumberBorder;
         ctx.beginPath();
         ctx.moveTo(rowNumW - 0.5, rowY);
-        ctx.lineTo(rowNumW - 0.5, rowY + rowH);
-        ctx.moveTo(0, rowY + rowH - 0.5);
-        ctx.lineTo(rowNumW, rowY + rowH - 0.5);
+        ctx.lineTo(rowNumW - 0.5, rowY + totalRowH);
+        ctx.moveTo(0, rowY + totalRowH - 0.5);
+        ctx.lineTo(rowNumW, rowY + totalRowH - 0.5);
         ctx.stroke();
       }
 
