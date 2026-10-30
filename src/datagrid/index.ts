@@ -120,3 +120,12 @@ export type {
   ServerSideStoreOptions,
 } from './types/ssrm';
 export { ServerSideRowStore } from './store/ServerSideRowStore';
+
+export { RowGroupingEngine, isGroupRow } from './utils/grouping/RowGroupingEngine';
+export type {
+  GroupRowMetadata,
+  GroupedRow,
+  GroupAggregation,
+  RowGroupingConfig,
+  GroupNode,
+} from './utils/grouping/RowGroupingEngine';
