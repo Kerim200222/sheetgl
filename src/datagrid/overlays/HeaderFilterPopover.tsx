@@ -13,14 +13,15 @@ import {
 import { BLANK_FILTER_TOKEN, WITH_FILE_FILTER_TOKEN, WITHOUT_FILE_FILTER_TOKEN, FilterEngine } from '../core/FilterEngine';
 import { SortEngine } from '../core/SortEngine';
 import { MaterialIcon } from '../ui/MaterialIcon';
+import { useGridState } from '../state';
 
 export interface HeaderFilterPopoverProps {
   column: ColumnDef;
   anchorRect: { x: number; y: number; width: number; height: number };
   viewportWidth?: number;
   viewportHeight?: number;
-  theme: IGridThemeTokens;
-  locale: IGridLocale;
+  theme?: IGridThemeTokens;
+  locale?: IGridLocale;
   store: IDataStore;
   activeFilter?: ColumnFilterState;
   /** Composite filter of all OTHER active columns (excluding this column) for context-aware counts */
@@ -397,17 +398,23 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   anchorRect,
   viewportWidth = 1000,
   viewportHeight = 800,
-  theme,
-  locale,
+  theme: propTheme,
+  locale: propLocale,
   store,
-  activeFilter,
+  activeFilter: propActiveFilter,
   baseFilter,
   onApply,
   onSort,
   onToggleGroup,
-  isGrouped,
+  isGrouped: propIsGrouped,
   onClose,
 }) => {
+  const gridState = useGridState();
+  const theme = propTheme ?? gridState.resolvedTheme;
+  const locale = propLocale ?? gridState.currentLocale;
+  const activeFilter = propActiveFilter ?? gridState.columnFilters[column.id];
+  const isGrouped = propIsGrouped ?? gridState.groups.some((g) => g.selector === column.id);
+
   const isTR = locale.code.startsWith('tr');
   const colType = (column.type || '').toLowerCase();
   const isNumericCol = NUMERIC_COLUMN_TYPES.has(colType) || NUMERIC_COLUMN_TYPES.has(column.type);

@@ -6,6 +6,7 @@ import { ActiveOverlayState, ColumnDef } from '../types/grid';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { GridApi } from '../core/GridApi';
+import { useGridState } from '../state';
 
 export interface DynamicCellEditorProps {
   /**
@@ -21,12 +22,12 @@ export interface DynamicCellEditorProps {
   /**
    * Current active theme tokens.
    */
-  theme: IGridThemeTokens;
+  theme?: IGridThemeTokens;
 
   /**
    * Active grid locale for localized editor strings.
    */
-  locale: IGridLocale;
+  locale?: IGridLocale;
 
   /**
    * GridApi reference passed to custom editors for programmatic grid interaction.
@@ -94,17 +95,26 @@ function resolveEditorComponent(column: ColumnDef): React.ComponentType<any> | n
  * Dynamically resolves and renders custom or built-in editors from CellEditorRegistry / ColumnTypeRegistry.
  */
 export const DynamicCellEditor: React.FC<DynamicCellEditorProps> = ({
-  overlay,
-  rowData,
-  theme,
-  locale,
-  api,
-  validationError,
-  isValidating,
+  overlay: propOverlay,
+  rowData: propRowData,
+  theme: propTheme,
+  locale: propLocale,
+  api: propApi,
+  validationError: propValidationError,
+  isValidating: propIsValidating,
   onCommit,
   onCancel,
 }) => {
-  if (!overlay) {
+  const gridState = useGridState();
+  const overlay = propOverlay ?? gridState?.activeOverlay;
+  const theme = propTheme ?? gridState?.resolvedTheme;
+  const locale = propLocale ?? gridState?.currentLocale;
+  const validationError = propValidationError ?? gridState?.editorValidationError;
+  const isValidating = propIsValidating ?? gridState?.isEditorValidating;
+  const rowData = propRowData;
+  const api = propApi;
+
+  if (!overlay || !theme || !locale) {
     return null;
   }
 
