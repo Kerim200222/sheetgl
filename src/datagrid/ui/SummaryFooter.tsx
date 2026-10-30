@@ -492,7 +492,7 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
         fontSize: 11,
         userSelect: 'none',
         position: 'relative',
-        zIndex: 130,
+        zIndex: 20,
       }}
     >
       {/* Optional Range Selection Stats Bar (floating or slim bar) */}
