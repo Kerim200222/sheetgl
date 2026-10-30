@@ -48,6 +48,7 @@ import { initDefaultColumnPlugins } from '../columns/initPlugins';
 import { ColumnTypeRegistry } from '../columns/ColumnTypeRegistry';
 import { CellEditorRegistry } from '../editing/CellEditorRegistry';
 import { LocaleEngine, LocaleInput, IGridLocale } from '../i18n/LocaleEngine';
+import { GridProvider, useGridContext, GridUIState, FillDragState } from '../state';
 
 export interface SheetGLProps {
   dataSource: any[] | IDataStore;
@@ -168,9 +169,14 @@ export function compileColumnFilters(
   return composite;
 }
 
-export const SheetGL = forwardRef<GridApi, SheetGLProps>((
+interface SheetGLInnerProps extends SheetGLProps {
+  store: IDataStore;
+}
+
+const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
   {
     dataSource,
+    store,
     columns: userColumns,
     columnGroups = [],
     groupHeaderHeight = 30,
@@ -225,209 +231,212 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   },
   ref
 ) => {
-  // 1. Initialize Default Column Plugins synchronously on first render
-  useMemo(() => {
-    initDefaultColumnPlugins();
-  }, []);
+  const { state, actions } = useGridContext();
+  const {
+    currentThemeName,
+    resolvedTheme,
+    currentLocale,
+    permissions,
+    toolbarConfig,
+    summaryConfig,
+    rowSelectionMode,
+    selectedRowKeys: selectedRowKeysSet,
+    sortRules,
+    groups,
+    columnFilters,
+    searchKeyword,
+    activeOverlay,
+    editorValidationError,
+    isEditorValidating,
+    headerFilterState,
+    contextMenu,
+    sparklineModal,
+    pdfModal,
+    showBatchModal,
+    deleteConfirmModal,
+    toastMessage,
+    cursorStyle,
+    fillDragState,
+  } = state;
 
-  // 2. DataStore Adaptation
-  const store = useMemo<IDataStore>(() => {
-    if (Array.isArray(dataSource)) {
-      const initialSummaries: Record<string, SummaryType> = {};
-      userColumns.forEach((c) => {
-        if (c.summaryType) {
-          initialSummaries[c.id] = c.summaryType;
-        }
-      });
-      if (userSummaryRow && typeof userSummaryRow === 'object') {
-        if (userSummaryRow.columnSummaryTypes) {
-          Object.assign(initialSummaries, userSummaryRow.columnSummaryTypes);
-        }
-        if (Array.isArray(userSummaryRow.items)) {
-          userSummaryRow.items.forEach((item) => {
-            initialSummaries[item.columnId] = item.summaryType;
-          });
-        }
-      }
-      return new LocalDataStore({
-        data: dataSource,
-        keyField: 'id',
-        batchMode: batchEditMode,
-        initialSummaries: Object.keys(initialSummaries).length > 0 ? initialSummaries : undefined,
-      });
-    }
-    return dataSource;
-  }, [dataSource]);
-
-  useEffect(() => {
-    store.setBatchMode?.(batchEditMode);
-  }, [store, batchEditMode]);
-
-  // 3. Theme Resolution
-  const [currentThemeName, setCurrentThemeName] = useState<ThemeInput>(userTheme);
-  const [resolvedTheme, setResolvedTheme] = useState<IGridThemeTokens>(() =>
-    ThemeEngine.resolve(userTheme)
+  const setCurrentThemeName = actions.setThemeName;
+  const setCurrentLocale = actions.setLocale;
+  const setPermissions = actions.setPermissions;
+  const handleUpdatePermissions = useCallback(
+    (next: GridPermissions) => {
+      actions.setPermissions(next);
+      onPermissionsChange?.(next);
+    },
+    [actions, onPermissionsChange]
   );
-
-  useEffect(() => {
-    setCurrentThemeName(userTheme);
-  }, [userTheme]);
-
-  useEffect(() => {
-    setResolvedTheme(ThemeEngine.resolve(currentThemeName));
-    if (currentThemeName === 'system') {
-      const unsub = ThemeEngine.watchSystem(() => {
-        setResolvedTheme(ThemeEngine.resolve('system'));
-      });
-      return unsub;
-    }
-  }, [currentThemeName]);
-
-  // 3b. Locale Resolution (i18n)
-  const [currentLocale, setCurrentLocale] = useState<IGridLocale>(() =>
-    LocaleEngine.resolve(userLocale)
-  );
-
-  useEffect(() => {
-    if (userLocale) {
-      setCurrentLocale(LocaleEngine.resolve(userLocale));
-    }
-  }, [userLocale]);
-
-  // 3c. Permissions State
-  const [permissions, setPermissions] = useState<GridPermissions>(
-    userPermissions || {
-      mode: 'write',
-      allowAdding: true,
-      allowUpdating: true,
-      allowDeleting: true,
-      allowDuplicating: true,
-      allowClipboardPaste: true,
-      allowExport: true,
-      allowFiltering: true,
-      allowSorting: true,
-      allowGrouping: true,
-      allowBatchSave: true,
-    }
-  );
-
-  useEffect(() => {
-    if (userPermissions) {
-      setPermissions(userPermissions);
-    }
-  }, [userPermissions]);
-
-  const handleUpdatePermissions = (next: GridPermissions) => {
-    setPermissions(next);
-    onPermissionsChange?.(next);
-  };
-
-  // 3d. Toolbar & Summary Row Configuration State
-  const [toolbarConfig, setToolbarConfig] = useState<GridToolbarConfig>(() => {
-    if (userToolbar === false) return { visible: false, buttonDisplayMode: 'icon-text' };
-    if (userToolbar && typeof userToolbar === 'object') {
-      return { visible: true, buttonDisplayMode: 'icon-text', ...userToolbar };
-    }
-    return { visible: true, buttonDisplayMode: 'icon-text' };
-  });
-
-  useEffect(() => {
-    if (userToolbar === false) {
-      setToolbarConfig((prev) => ({ ...prev, visible: false }));
-    } else if (userToolbar === true) {
-      setToolbarConfig((prev) => ({ ...prev, visible: true }));
-    } else if (userToolbar && typeof userToolbar === 'object') {
-      setToolbarConfig((prev) => ({
-        ...prev,
-        visible: userToolbar.visible !== false,
-        ...userToolbar,
-      }));
-    }
-  }, [userToolbar]);
 
   const handleUpdateToolbarConfig = useCallback(
     (patch: Partial<GridToolbarConfig>) => {
-      setToolbarConfig((prev) => {
-        const next = { ...prev, ...patch };
-        onToolbarConfigChange?.(next);
-        return next;
-      });
+      actions.updateToolbarConfig(patch);
+      onToolbarConfigChange?.({ ...toolbarConfig, ...patch });
     },
-    [onToolbarConfigChange]
+    [actions, toolbarConfig, onToolbarConfigChange]
   );
-
-  const [summaryConfig, setSummaryConfig] = useState<GridSummaryConfig>(() => {
-    if (userSummaryRow === false) return { visible: false };
-    if (userSummaryRow && typeof userSummaryRow === 'object') {
-      return {
-        visible: true,
-        showTotalCount: true,
-        showSelectionStats: true,
-        showColumnSummaries: true,
-        allowConfiguration: true,
-        ...userSummaryRow,
-      };
-    }
-    return {
-      visible: true,
-      showTotalCount: true,
-      showSelectionStats: true,
-      showColumnSummaries: true,
-      allowConfiguration: true,
-    };
-  });
-
-  useEffect(() => {
-    if (userSummaryRow === false) {
-      setSummaryConfig((prev) => ({ ...prev, visible: false }));
-    } else if (userSummaryRow === true) {
-      setSummaryConfig((prev) => ({ ...prev, visible: true }));
-    } else if (userSummaryRow && typeof userSummaryRow === 'object') {
-      setSummaryConfig((prev) => ({
-        ...prev,
-        visible: userSummaryRow.visible !== false,
-        ...userSummaryRow,
-      }));
-      if (userSummaryRow.columnSummaryTypes) {
-        Object.entries(userSummaryRow.columnSummaryTypes).forEach(([colId, sType]) => {
-          store.setSummaryType?.(colId, sType);
-        });
-      }
-      if (Array.isArray(userSummaryRow.items)) {
-        userSummaryRow.items.forEach((item) => {
-          store.setSummaryType?.(item.columnId, item.summaryType);
-        });
-      }
-    }
-  }, [userSummaryRow, store]);
 
   const handleUpdateSummaryConfig = useCallback(
     (patch: Partial<GridSummaryConfig>) => {
-      setSummaryConfig((prev) => {
-        const next = { ...prev, ...patch };
-        onSummaryConfigChange?.(next);
-        return next;
-      });
+      actions.updateSummaryConfig(patch);
+      onSummaryConfigChange?.({ ...summaryConfig, ...patch });
     },
-    [onSummaryConfigChange]
+    [actions, summaryConfig, onSummaryConfigChange]
   );
 
-  // 4. Row Selection State
-  const [rowSelectionMode, setRowSelectionMode] = useState<RowSelectionMode>(userSelectionMode);
-  useEffect(() => {
-    setRowSelectionMode(userSelectionMode);
-  }, [userSelectionMode]);
-
-  const [selectedRowKeysSet, setSelectedRowKeysSet] = useState<Set<any>>(
-    () => new Set(userSelectedRowKeys || [])
+  const setSelectedRowKeysSet = useCallback(
+    (arg: Set<any> | any[] | ((prev: Set<any>) => Set<any>)) => {
+      if (typeof arg === 'function') {
+        actions.setSelectedRowKeys(arg(state.selectedRowKeys));
+      } else {
+        actions.setSelectedRowKeys(arg);
+      }
+    },
+    [actions, state.selectedRowKeys]
   );
-  useEffect(() => {
-    if (userSelectedRowKeys) {
-      setSelectedRowKeysSet(new Set(userSelectedRowKeys));
-    }
-  }, [userSelectedRowKeys]);
+
+  const setSortRules = actions.setSortRules;
+  const setGroups = useCallback(
+    (arg: GroupDescriptor[] | ((prev: GroupDescriptor[]) => GroupDescriptor[])) => {
+      if (typeof arg === 'function') {
+        actions.setGroups(arg(state.groups));
+      } else {
+        actions.setGroups(arg);
+      }
+    },
+    [actions, state.groups]
+  );
+  const setColumnFilters = actions.setColumnFilters;
+  const setSearchKeyword = actions.setSearchKeyword;
+
+  const setActiveOverlay = useCallback(
+    (arg: ActiveOverlayState | null | ((prev: ActiveOverlayState | null) => ActiveOverlayState | null)) => {
+      if (typeof arg === 'function') {
+        const next = arg(state.activeOverlay);
+        if (next) actions.openCellEditor(next);
+        else actions.closeCellEditor();
+      } else if (arg) {
+        actions.openCellEditor(arg);
+      } else {
+        actions.closeCellEditor();
+      }
+    },
+    [actions, state.activeOverlay]
+  );
+
+  const setEditorValidationError = useCallback(
+    (err: string | null) => {
+      actions.setEditorValidating(state.isEditorValidating, err);
+    },
+    [actions, state.isEditorValidating]
+  );
+
+  const setIsEditorValidating = useCallback(
+    (validating: boolean) => {
+      actions.setEditorValidating(validating, state.editorValidationError);
+    },
+    [actions, state.editorValidationError]
+  );
+
+  const setHeaderFilterState = useCallback(
+    (arg: any) => {
+      if (typeof arg === 'function') {
+        const next = arg(state.headerFilterState);
+        if (next) actions.openHeaderFilter(next);
+        else actions.closeHeaderFilter();
+      } else if (arg) {
+        actions.openHeaderFilter(arg);
+      } else {
+        actions.closeHeaderFilter();
+      }
+    },
+    [actions, state.headerFilterState]
+  );
+
+  const setContextMenu = useCallback(
+    (arg: any) => {
+      if (typeof arg === 'function') {
+        const next = arg(state.contextMenu);
+        if (next) actions.openContextMenu(next);
+        else actions.closeContextMenu();
+      } else if (arg) {
+        actions.openContextMenu(arg);
+      } else {
+        actions.closeContextMenu();
+      }
+    },
+    [actions, state.contextMenu]
+  );
+
+  const setSparklineModal = useCallback(
+    (arg: any) => {
+      if (typeof arg === 'function') {
+        const next = arg(state.sparklineModal);
+        if (next) actions.openSparklineModal(next);
+        else actions.closeSparklineModal();
+      } else if (arg) {
+        actions.openSparklineModal(arg);
+      } else {
+        actions.closeSparklineModal();
+      }
+    },
+    [actions, state.sparklineModal]
+  );
+
+  const setPdfModal = useCallback(
+    (arg: any) => {
+      if (typeof arg === 'function') {
+        const next = arg(state.pdfModal);
+        if (next) actions.openPdfModal(next);
+        else actions.closePdfModal();
+      } else if (arg) {
+        actions.openPdfModal(arg);
+      } else {
+        actions.closePdfModal();
+      }
+    },
+    [actions, state.pdfModal]
+  );
+
+  const setShowBatchModal = useCallback(
+    (show: boolean) => {
+      actions.setShowBatchModal(show);
+    },
+    [actions]
+  );
+
+  const setDeleteConfirmModal = useCallback(
+    (arg: any) => {
+      if (typeof arg === 'function') {
+        const next = arg(state.deleteConfirmModal);
+        if (next) actions.openDeleteConfirmModal(next);
+        else actions.closeDeleteConfirmModal();
+      } else if (arg) {
+        actions.openDeleteConfirmModal(arg);
+      } else {
+        actions.closeDeleteConfirmModal();
+      }
+    },
+    [actions, state.deleteConfirmModal]
+  );
+
+  const setCursorStyle = actions.setCursorStyle;
+  const setFillDragState = useCallback(
+    (arg: FillDragState | null | ((prev: FillDragState | null) => FillDragState | null)) => {
+      if (typeof arg === 'function') {
+        actions.setFillDragState(arg(state.fillDragState));
+      } else {
+        actions.setFillDragState(arg);
+      }
+    },
+    [actions, state.fillDragState]
+  );
+  const showToast = actions.showToast;
 
   // 4b. Geometry & Layout Hook
+  const scrollSaveTimerRef = useRef<number | null>(null);
   const {
     containerRef,
     gridSurfaceRef,
@@ -462,7 +471,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     rowSelectionMode,
     rowCount: store.getRowCount(),
     onRequestRender: () => requestRenderRef.current(),
-    onActiveOverlayClear: () => setActiveOverlay(null),
+    onActiveOverlayClear: () => actions.closeCellEditor(),
     onColumnResize,
     onScrollChange: (pos) => {
       onScrollChange?.(pos);
@@ -483,70 +492,16 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     },
   });
 
-  const scrollSaveTimerRef = useRef<number | null>(null);
   const historyRef = useRef<HistoryManager>(new HistoryManager(100));
-  // 5. UI State Management
-  const [sortRules, setSortRules] = useState<SortDescriptor[]>(() => {
-    if (storageKey) {
-      try {
-        const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed.sortRules)) return parsed.sortRules;
-        }
-      } catch {}
-    }
-    return initialSort;
-  });
-  const [groups, setGroups] = useState<GroupDescriptor[]>(initialGroups);
-  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterState>>(() => {
-    if (storageKey) {
-      try {
-        const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed.columnFilters && typeof parsed.columnFilters === 'object') {
-            return parsed.columnFilters;
-          }
-        }
-      } catch {}
-    }
-    return {};
-  });
-  const [searchKeyword, setSearchKeyword] = useState<string>('');
-  const [activeOverlay, setActiveOverlay] = useState<ActiveOverlayState | null>(null);
-  const [editorValidationError, setEditorValidationError] = useState<string | null>(null);
-  const [isEditorValidating, setIsEditorValidating] = useState<boolean>(false);
-  const [headerFilterState, setHeaderFilterState] = useState<{
-    column: ColumnDef;
-    rect: { x: number; y: number; width: number; height: number };
-  } | null>(null);
 
   const activeBaseFilter = useMemo(() => {
     if (!headerFilterState) return undefined;
     return compileColumnFilters(columnFilters, headerFilterState.column.id);
   }, [columnFilters, headerFilterState?.column.id]);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [sparklineModal, setSparklineModal] = useState<SparklineModalState | null>(null);
-  const [pdfModal, setPdfModal] = useState<PdfPreviewModalState | null>(null);
-  const [showBatchModal, setShowBatchModal] = useState<boolean>(false);
-  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{
-    rowKeys: any[];
-    sampleRows: Record<string, any>[];
-    singleRowIndex?: number;
-  } | null>(null);
-  const [toastMessage, setToastMessage] = useState<{ text: string; type: 'info' | 'warning' | 'success' } | null>(null);
 
   // Hover & Drag States
   const hoveredCellRef = useRef<{ row: number; col: number } | null>(null);
   const hoveredFilterColRef = useRef<number | null>(null);
-  const [cursorStyle, setCursorStyle] = useState<string>('cell');
-
-  const [fillDragState, setFillDragState] = useState<{
-    mode: 'corner' | 'right-duplicate';
-    sourceRange: { minRow: number; maxRow: number; minCol: number; maxCol: number };
-    targetRange: { minRow: number; maxRow: number; minCol: number; maxCol: number };
-  } | null>(null);
 
   // Async Backend Cascading Row Loading Keys
   const loadingRowKeysRef = useRef<Set<any>>(new Set());
@@ -556,13 +511,6 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
   // DOM Element Refs (canvas remains local to SheetGL)
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const showToast = useCallback((text: string, type: 'info' | 'warning' | 'success' = 'info') => {
-    setToastMessage({ text, type });
-    setTimeout(() => {
-      setToastMessage((prev) => (prev?.text === text ? null : prev));
-    }, 2600);
-  }, []);
 
   // Store listener
   const [storeVersion, setStoreVersion] = useState<number>(0);
@@ -3242,23 +3190,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     >
       {/* 1. TOP TOOLBAR */}
       <ToolBar
-        theme={resolvedTheme}
-        locale={currentLocale}
-        currentThemeName={typeof currentThemeName === 'string' ? currentThemeName : 'custom'}
-        onThemeChange={(nextTheme) => {
-          setCurrentThemeName(nextTheme);
-          if (typeof nextTheme === 'string') {
-            onThemeChange?.(nextTheme);
-          }
-        }}
-        onLocaleChange={(code) => {
-          const resolved = LocaleEngine.resolve(code);
-          setCurrentLocale(resolved);
-          onLocaleChange?.(resolved.code.startsWith('tr') ? 'tr' : 'en', resolved);
-        }}
-        searchKeyword={searchKeyword}
         onSearchChange={async (k) => {
-          setSearchKeyword(k);
+          actions.setSearchKeyword(k);
           await store.setSearch(k);
           setStoreVersion((v) => v + 1);
           requestRender();
@@ -3284,8 +3217,6 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         onUpdateColumn={handleUpdateColumnDef}
         summaryTypes={store.getSummaryTypes?.()}
         onChangeSummaryType={handleChangeSummaryType}
-        permissions={permissions}
-        onPermissionsChange={handleUpdatePermissions}
         onAddRow={() => handleInsertRow(0)}
         onDuplicateRow={() => handleDuplicateRow(selectedCellUI.row)}
         onDeleteRow={() => handleDeleteRow()}
@@ -3304,26 +3235,18 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         pendingChangesCount={pendingChangesCount}
         onSaveBatch={handleSaveBatch}
         onDiscardBatch={handleDiscardBatch}
-        onInspectBatchChanges={() => setShowBatchModal(true)}
-        selectedRowCount={selectedRowKeysSet.size}
-        selectionMode={rowSelectionMode}
         onSelectionModeChange={(m) => {
-          setRowSelectionMode(m);
+          actions.setRowSelectionMode(m);
           if (m === 'none') {
-            setSelectedRowKeysSet(new Set());
+            actions.clearSelectedRows();
             onSelectionChanged?.([], []);
           } else if (m === 'single' && selectedRowKeysSet.size > 1) {
             const first = Array.from(selectedRowKeysSet)[0];
-            setSelectedRowKeysSet(new Set([first]));
+            actions.setSelectedRowKeys(new Set([first]));
           }
           onSelectionModeChange?.(m);
         }}
-        activeFilterCount={Object.keys(columnFilters).length}
         onClearAllFilters={handleClearAllFilters}
-        toolbarConfig={toolbarConfig}
-        onUpdateToolbarConfig={handleUpdateToolbarConfig}
-        summaryConfig={summaryConfig}
-        onUpdateSummaryConfig={handleUpdateSummaryConfig}
       />
 
       {/* 2. FORMULA & COORDINATE BAR */}
@@ -3334,12 +3257,6 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           column={currentColumn}
           currentValue={currentCellValue}
           isEditable={isActiveCellEditable}
-          buttonDisplayMode={toolbarConfig.buttonDisplayMode || 'icon-text'}
-          canDuplicate={
-            permissions.mode !== 'read' &&
-            permissions.mode !== 'readonly' &&
-            permissions.allowDuplicating !== false
-          }
           onCommitValue={(newVal) => {
             if (currentColumn) {
               commitSingleCellEdit(selectedCellUI.row, currentColumn, newVal, true);
@@ -3364,8 +3281,6 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               });
             }
           }}
-          theme={resolvedTheme}
-          locale={currentLocale}
         />
       )}
 
@@ -3669,10 +3584,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             column={headerFilterState.column}
             anchorRect={headerFilterState.rect}
             viewportWidth={gridSurfaceRef.current?.clientWidth || 1000}
-            theme={resolvedTheme}
-            locale={currentLocale}
             store={store}
-            activeFilter={columnFilters[headerFilterState.column.id]}
             baseFilter={activeBaseFilter}
             onApply={(filterState) => {
               handleApplyColumnFilter(headerFilterState.column.id, filterState);
@@ -3687,7 +3599,6 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               }
             }}
             onToggleGroup={() => handleToggleGroupColumn(headerFilterState.column.id)}
-            isGrouped={groups.some((g) => g.selector === headerFilterState.column.id)}
             onClose={() => setHeaderFilterState(null)}
           />
         )}
@@ -3698,9 +3609,6 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             menu={contextMenu}
             viewportWidth={gridSurfaceRef.current?.clientWidth || 1000}
             viewportHeight={gridSurfaceRef.current?.clientHeight || 600}
-            theme={resolvedTheme}
-            locale={currentLocale}
-            permissions={permissions}
             isCellEditable={
               contextMenu.rowData && contextMenu.column
                 ? canEditCell(contextMenu.rowData, contextMenu.column, contextMenu.row, true)
@@ -3820,19 +3728,15 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
         {/* 6b. DETAILED SPARKLINE TREND CHART MODAL DIALOG */}
         {pdfModal && (
-        <PdfPreviewModalOverlay
-          modal={pdfModal}
-          theme={resolvedTheme}
-          locale={currentLocale}
-          onClose={() => setPdfModal(null)}
-        />
-      )}
+          <PdfPreviewModalOverlay
+            modal={pdfModal}
+            onClose={() => setPdfModal(null)}
+          />
+        )}
 
-      {sparklineModal && (
+        {sparklineModal && (
           <SparklineModalOverlay
             modal={sparklineModal}
-            theme={resolvedTheme}
-            locale={currentLocale}
             onClose={() => {
               setSparklineModal(null);
               containerRef.current?.focus();
@@ -3845,8 +3749,6 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           <BatchChangesModal
             changes={pendingChanges}
             columns={columns}
-            theme={resolvedTheme}
-            locale={currentLocale}
             onConfirmSave={commitBatchSave}
             onDiscardAll={handleDiscardBatch}
             onRevertDelete={(rk) => {
@@ -3877,8 +3779,6 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             rowKeys={deleteConfirmModal.rowKeys}
             sampleRows={deleteConfirmModal.sampleRows}
             batchMode={Boolean(store.isBatchMode?.())}
-            theme={resolvedTheme}
-            locale={currentLocale}
             onConfirm={executeConfirmedDelete}
             onCancel={() => {
               setDeleteConfirmModal(null);
@@ -3893,18 +3793,137 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         summaries={store.getSummaries()}
         summaryTypes={store.getSummaryTypes?.()}
         onChangeSummaryType={handleChangeSummaryType}
-        summaryConfig={summaryConfig}
-        onUpdateSummaryConfig={handleUpdateSummaryConfig}
         selectionStats={selectionStats}
         columns={effectiveColumns}
         geometry={geometryRef.current}
         scrollContainerRef={scrollContainerRef}
-        theme={resolvedTheme}
-        locale={currentLocale}
         totalRowCount={store.getFilteredRowCount?.() ?? store.getRowCount()}
         unfilteredRowCount={store.getTotalDatasetRowCount?.() ?? store.getRowCount()}
       />
     </div>
+  );
+});
+
+SheetGLInner.displayName = 'SheetGLInner';
+
+export const SheetGL = forwardRef<GridApi, SheetGLProps>((props, ref) => {
+  // 1. Initialize Default Column Plugins synchronously on first render
+  useMemo(() => {
+    initDefaultColumnPlugins();
+  }, []);
+
+  // 2. DataStore Adaptation
+  const store = useMemo<IDataStore>(() => {
+    if (Array.isArray(props.dataSource)) {
+      const initialSummaries: Record<string, SummaryType> = {};
+      props.columns.forEach((c) => {
+        if (c.summaryType) {
+          initialSummaries[c.id] = c.summaryType;
+        }
+      });
+      if (props.summaryRow && typeof props.summaryRow === 'object') {
+        if (props.summaryRow.columnSummaryTypes) {
+          Object.assign(initialSummaries, props.summaryRow.columnSummaryTypes);
+        }
+        if (Array.isArray(props.summaryRow.items)) {
+          props.summaryRow.items.forEach((item) => {
+            initialSummaries[item.columnId] = item.summaryType;
+          });
+        }
+      }
+      return new LocalDataStore({
+        data: props.dataSource,
+        keyField: 'id',
+        batchMode: props.batchEditMode !== false,
+        initialSummaries: Object.keys(initialSummaries).length > 0 ? initialSummaries : undefined,
+      });
+    }
+    return props.dataSource;
+  }, [props.dataSource]);
+
+  useEffect(() => {
+    store.setBatchMode?.(props.batchEditMode !== false);
+  }, [store, props.batchEditMode]);
+
+  const initialState = useMemo<Partial<GridUIState>>(() => {
+    let savedSortRules: SortDescriptor[] | undefined = props.initialSort;
+    let savedFilters: Record<string, ColumnFilterState> | undefined = undefined;
+    if (props.storageKey) {
+      try {
+        const raw = localStorage.getItem(sheetgl_state_v1_);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed.sortRules)) savedSortRules = parsed.sortRules;
+          if (parsed.columnFilters && typeof parsed.columnFilters === 'object') {
+            savedFilters = parsed.columnFilters;
+          }
+        }
+      } catch {}
+    }
+
+    const themeInput = props.theme || 'apple-dark';
+    const localeInput = props.locale ? LocaleEngine.resolve(props.locale) : undefined;
+    return {
+      sortRules: savedSortRules,
+      groups: props.initialGroups,
+      columnFilters: savedFilters,
+      currentThemeName: themeInput,
+      resolvedTheme: ThemeEngine.resolve(themeInput),
+      currentLocale: localeInput,
+      permissions: props.permissions,
+      toolbarConfig:
+        typeof props.toolbar === 'object'
+          ? { visible: true, buttonDisplayMode: 'icon-text', ...props.toolbar }
+          : props.toolbar === false
+          ? { visible: false, buttonDisplayMode: 'icon-text' }
+          : undefined,
+      summaryConfig:
+        typeof props.summaryRow === 'object'
+          ? {
+              visible: true,
+              showTotalCount: true,
+              showSelectionStats: true,
+              showColumnSummaries: true,
+              allowConfiguration: true,
+              ...props.summaryRow,
+            }
+          : props.summaryRow === false
+          ? { visible: false }
+          : undefined,
+      rowSelectionMode: props.selectionMode,
+      selectedRowKeys: props.selectedRowKeys ? new Set(props.selectedRowKeys) : undefined,
+    };
+  }, []);
+
+  return (
+    <GridProvider
+      store={store}
+      initialState={initialState}
+      onColumnFiltersChange={(filters) => {
+        props.onFilterChange?.(compileColumnFilters(filters), filters);
+      }}
+      onThemeChange={
+        props.onThemeChange
+          ? (t) => props.onThemeChange?.(typeof t === 'string' ? t : 'custom')
+          : undefined
+      }
+      onLocaleChange={
+        props.onLocaleChange
+          ? (loc) => props.onLocaleChange?.(loc.code.startsWith('tr') ? 'tr' : 'en', loc)
+          : undefined
+      }
+      onPermissionsChange={props.onPermissionsChange}
+      onSelectionChange={
+        props.onSelectionChanged
+          ? (keys) => {
+              const rows = keys.map((k) => (store as any).getRowByKey?.(k) || {}).filter(Boolean);
+              props.onSelectionChanged?.(keys, rows);
+            }
+          : undefined
+      }
+    >
+      <SheetGLInner {...props} store={store} ref={ref} />
+    </GridProvider>
   );
 });
 

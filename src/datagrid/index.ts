@@ -1,5 +1,4 @@
 export { SheetGL } from './ui/SheetGL';
-export { SHEETGL_VERSION } from './version';
 export type { SheetGLProps } from './ui/SheetGL';
 export type { GridApi, NormalizedCellRange } from './core/GridApi';
 export { useGridSelection } from './hooks/useGridSelection';
@@ -106,3 +105,5 @@ export type {
   CellCommitDirection,
   CellEditorComponent,
 } from './editing';
+
+export * from './state';
