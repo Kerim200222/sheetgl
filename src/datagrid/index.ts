@@ -1,5 +1,4 @@
 export { SheetGL } from './ui/SheetGL';
-export { SHEETGL_VERSION } from './version';
 export type { SheetGLProps } from './ui/SheetGL';
 export type { GridApi, NormalizedCellRange } from './core/GridApi';
 export { useGridSelection } from './hooks/useGridSelection';
@@ -124,3 +123,4 @@ export { ServerSideRowStore } from './store/ServerSideRowStore';
 
 export { ColumnManager } from './core/ColumnManager';
 export type { AutoSizeOptions } from './core/ColumnManager';
+export * from './state';
