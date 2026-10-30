@@ -109,14 +109,19 @@ export class CanvasRenderer {
         store.ensureRange(0, Math.max(0, Math.ceil((height - headerH) / rowH)));
       }
 
-      // 3. Viewport Scrollable Column Bounds
-      let startScrollColIdx = 0;
-      let endScrollColIdx = geometry.scrollableColumns.length - 1;
+      const totalLeftPinnedWidth = geometry.totalLeftPinnedWidth;
+      const rightPinnedStartX = geometry.getRightPinnedStartX();
+      const centerClipWidth = Math.max(0, rightPinnedStartX - totalLeftPinnedWidth);
+      const rightClipWidth = Math.max(0, width - rightPinnedStartX);
 
-      if (geometry.scrollableColumns.length > 0) {
-        startScrollColIdx = geometry.findScrollableColIndexAtX(scrollLeft);
-        endScrollColIdx = geometry.findScrollableColIndexAtX(
-          scrollLeft + Math.max(0, width - geometry.totalFrozenWidth)
+      // 3. Viewport Center Column Bounds
+      let startCenterColIdx = 0;
+      let endCenterColIdx = geometry.centerColumns.length - 1;
+
+      if (geometry.centerColumns.length > 0) {
+        startCenterColIdx = geometry.findCenterColIndexAtX(scrollLeft);
+        endCenterColIdx = geometry.findCenterColIndexAtX(
+          scrollLeft + centerClipWidth
         );
       }
 
@@ -136,7 +141,7 @@ export class CanvasRenderer {
         (theme.isDark ? 'rgba(10, 132, 255, 0.06)' : 'rgba(0, 122, 255, 0.035)');
 
       // ========================================================================
-      // DATA ROWS & CELLS
+      // SKELETONS & GROUP ROWS (Full Width Passes)
       // ========================================================================
       for (let r = startRow; r <= endRow; r++) {
         const rowY = headerH + r * rowH - scrollTop;
@@ -161,6 +166,89 @@ export class CanvasRenderer {
           );
           continue;
         }
+      }
+
+      // ========================================================================
+      // 3-PASS DUAL PINNING DATA CELL RENDERING
+      // ========================================================================
+
+      // --- PASS 1 (Center Scrollable) ---
+      if (geometry.centerColumns.length > 0 && centerClipWidth > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(totalLeftPinnedWidth, headerH, centerClipWidth, Math.max(0, height - headerH));
+        ctx.clip();
+
+        for (let r = startRow; r <= endRow; r++) {
+          const vRow = store.getViewRow(r);
+          if (!vRow || vRow.type !== 'data') continue;
+
+          const rowData = vRow.data;
+          const rowKey = rowData.id ?? r;
+          const isRowInserted = store.isRowInserted?.(rowKey) ?? false;
+          const isRowLoading = loadingRowKeys?.has(rowKey) ?? false;
+          const rowY = headerH + r * rowH - scrollTop;
+          const isZebraRow = Boolean(resolvedZebraBg && r % 2 === 1);
+          const isRowHovered = hoveredCell?.row === r;
+
+          if (isZebraRow && resolvedZebraBg) {
+            ctx.fillStyle = resolvedZebraBg;
+            ctx.fillRect(totalLeftPinnedWidth, rowY, centerClipWidth, rowH);
+          }
+          if (isRowHovered) {
+            ctx.fillStyle = resolvedRowHoverBg;
+            ctx.fillRect(totalLeftPinnedWidth, rowY, centerClipWidth, rowH);
+          }
+
+          for (let sc = startCenterColIdx; sc <= endCenterColIdx; sc++) {
+            const col = geometry.centerColumns[sc];
+            if (!col) continue;
+
+            const colIdx = geometry.leftPinnedColumns.length + sc;
+            const cellX = totalLeftPinnedWidth + geometry.centerColOffsets[sc] - scrollLeft;
+            const colStyle = ColumnColorEngine.resolveColumnStyle(
+              col,
+              geometry.getColumnGroup(col),
+              theme.isDark
+            );
+            this.renderCell(
+              ctx,
+              rowData,
+              rowKey,
+              r,
+              col,
+              colIdx,
+              cellX,
+              rowY,
+              col.width,
+              rowH,
+              theme,
+              locale,
+              selection,
+              store,
+              hoveredCell,
+              searchKeyword,
+              isRowInserted,
+              isRowLoading,
+              permissions,
+              selectionMode,
+              selectedRowKeys,
+              colStyle
+            );
+          }
+        }
+        ctx.restore();
+      }
+
+      // --- PASS 2 (Left Pinned Columns & Row Numbers) ---
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, headerH, totalLeftPinnedWidth, Math.max(0, height - headerH));
+      ctx.clip();
+
+      for (let r = startRow; r <= endRow; r++) {
+        const vRow = store.getViewRow(r);
+        if (!vRow || vRow.type !== 'data') continue;
 
         const rowData = vRow.data;
         const rowKey = rowData.id ?? r;
@@ -169,84 +257,17 @@ export class CanvasRenderer {
         const isRowInActiveSel = r >= normSel.minRow && r <= normSel.maxRow;
         const isZebraRow = Boolean(resolvedZebraBg && r % 2 === 1);
         const isRowHovered = hoveredCell?.row === r;
+        const rowY = headerH + r * rowH - scrollTop;
 
-        // 1. SCROLLABLE COLUMNS
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(
-          geometry.totalFrozenWidth,
-          headerH,
-          Math.max(0, width - geometry.totalFrozenWidth),
-          Math.max(0, height - headerH)
-        );
-        ctx.clip();
-
-        if (isZebraRow && resolvedZebraBg) {
-          ctx.fillStyle = resolvedZebraBg;
-          ctx.fillRect(
-            geometry.totalFrozenWidth,
-            rowY,
-            Math.max(0, width - geometry.totalFrozenWidth),
-            rowH
-          );
-        }
-        if (isRowHovered) {
-          ctx.fillStyle = resolvedRowHoverBg;
-          ctx.fillRect(
-            geometry.totalFrozenWidth,
-            rowY,
-            Math.max(0, width - geometry.totalFrozenWidth),
-            rowH
-          );
-        }
-
-        for (let sc = startScrollColIdx; sc <= endScrollColIdx; sc++) {
-          const colIdx = geometry.frozenColumns.length + sc;
-          const col = geometry.columns[colIdx];
-          if (!col) continue;
-
-          const cellX = geometry.totalFrozenWidth + geometry.scrollableColOffsets[sc] - scrollLeft;
-          const colStyle = ColumnColorEngine.resolveColumnStyle(
-            col,
-            geometry.getColumnGroup(col),
-            theme.isDark
-          );
-          this.renderCell(
-            ctx,
-            rowData,
-            rowKey,
-            r,
-            col,
-            colIdx,
-            cellX,
-            rowY,
-            col.width,
-            rowH,
-            theme,
-            locale,
-            selection,
-            store,
-            hoveredCell,
-            searchKeyword,
-            isRowInserted,
-            isRowLoading,
-            permissions,
-            selectionMode,
-            selectedRowKeys,
-            colStyle
-          );
-        }
-        ctx.restore();
-
-        // 2. FROZEN COLUMNS
-        let curFrozenX = rowNumW;
-        for (let fc = 0; fc < geometry.frozenColumns.length; fc++) {
-          const col = geometry.frozenColumns[fc];
+        // Render Left Pinned Cells
+        let curLeftX = rowNumW;
+        for (let lc = 0; lc < geometry.leftPinnedColumns.length; lc++) {
+          const col = geometry.leftPinnedColumns[lc];
           ctx.fillStyle = isZebraRow && resolvedZebraBg ? resolvedZebraBg : theme.canvas.bg;
-          ctx.fillRect(curFrozenX, rowY, col.width, rowH);
+          ctx.fillRect(curLeftX, rowY, col.width, rowH);
           if (isRowHovered) {
             ctx.fillStyle = resolvedRowHoverBg;
-            ctx.fillRect(curFrozenX, rowY, col.width, rowH);
+            ctx.fillRect(curLeftX, rowY, col.width, rowH);
           }
 
           const colStyle = ColumnColorEngine.resolveColumnStyle(
@@ -260,8 +281,8 @@ export class CanvasRenderer {
             rowKey,
             r,
             col,
-            fc,
-            curFrozenX,
+            lc,
+            curLeftX,
             rowY,
             col.width,
             rowH,
@@ -278,11 +299,10 @@ export class CanvasRenderer {
             selectedRowKeys,
             colStyle
           );
-
-          curFrozenX += col.width;
+          curLeftX += col.width;
         }
 
-        // 3. ROW NUMBER GUTTER (Leftmost)
+        // Row Number Gutter (Leftmost)
         ctx.fillStyle = isRowInActiveSel
           ? theme.isDark
             ? 'rgba(10, 132, 255, 0.22)'
@@ -294,7 +314,6 @@ export class CanvasRenderer {
           : theme.canvas.rowNumberBg;
         ctx.fillRect(0, rowY, rowNumW, rowH);
 
-        // Inserted row left indicator bar
         if (isRowInserted) {
           ctx.fillStyle = '#30D158';
           ctx.fillRect(0, rowY, 4, rowH);
@@ -319,11 +338,80 @@ export class CanvasRenderer {
         ctx.stroke();
       }
 
-      // Frozen column divider shadow
-      if (geometry.frozenColumns.length > 0) {
-        ctx.save();
+      // Fixed vertical divider shadow on right edge of Left Pinned zone
+      if (geometry.leftPinnedColumns.length > 0) {
         ctx.fillStyle = theme.canvas.frozenDividerShadow;
-        ctx.fillRect(geometry.totalFrozenWidth, headerH, 3, height - headerH);
+        ctx.fillRect(totalLeftPinnedWidth - 1, headerH, 3, height - headerH);
+      }
+      ctx.restore();
+
+      // --- PASS 3 (Right Pinned Columns) ---
+      if (geometry.rightPinnedColumns.length > 0 && rightClipWidth > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(rightPinnedStartX, headerH, rightClipWidth, Math.max(0, height - headerH));
+        ctx.clip();
+
+        const baseRightIdx = geometry.leftPinnedColumns.length + geometry.centerColumns.length;
+        for (let r = startRow; r <= endRow; r++) {
+          const vRow = store.getViewRow(r);
+          if (!vRow || vRow.type !== 'data') continue;
+
+          const rowData = vRow.data;
+          const rowKey = rowData.id ?? r;
+          const isRowInserted = store.isRowInserted?.(rowKey) ?? false;
+          const isRowLoading = loadingRowKeys?.has(rowKey) ?? false;
+          const rowY = headerH + r * rowH - scrollTop;
+          const isZebraRow = Boolean(resolvedZebraBg && r % 2 === 1);
+          const isRowHovered = hoveredCell?.row === r;
+
+          for (let rc = 0; rc < geometry.rightPinnedColumns.length; rc++) {
+            const col = geometry.rightPinnedColumns[rc];
+            const colIdx = baseRightIdx + rc;
+            const cellX = rightPinnedStartX + geometry.rightColOffsets[rc];
+
+            ctx.fillStyle = isZebraRow && resolvedZebraBg ? resolvedZebraBg : theme.canvas.bg;
+            ctx.fillRect(cellX, rowY, col.width, rowH);
+            if (isRowHovered) {
+              ctx.fillStyle = resolvedRowHoverBg;
+              ctx.fillRect(cellX, rowY, col.width, rowH);
+            }
+
+            const colStyle = ColumnColorEngine.resolveColumnStyle(
+              col,
+              geometry.getColumnGroup(col),
+              theme.isDark
+            );
+            this.renderCell(
+              ctx,
+              rowData,
+              rowKey,
+              r,
+              col,
+              colIdx,
+              cellX,
+              rowY,
+              col.width,
+              rowH,
+              theme,
+              locale,
+              selection,
+              store,
+              hoveredCell,
+              searchKeyword,
+              isRowInserted,
+              isRowLoading,
+              permissions,
+              selectionMode,
+              selectedRowKeys,
+              colStyle
+            );
+          }
+        }
+
+        // Subtle drop shadow / vertical separator line on left edge of Right Pinned zone
+        ctx.fillStyle = theme.canvas.frozenDividerShadow;
+        ctx.fillRect(rightPinnedStartX - 2, headerH, 3, height - headerH);
         ctx.restore();
       }
 
@@ -786,101 +874,112 @@ export class CanvasRenderer {
     const groupH = hasGroups ? geometry.groupHeaderHeight : 0;
     const colHeaderH = hasGroups ? geometry.baseHeaderHeight : headerH;
 
-    // 1. SCROLLABLE HEADERS
+    const totalLeftPinnedWidth = geometry.totalLeftPinnedWidth;
+    const rightPinnedStartX = geometry.getRightPinnedStartX();
+    const centerClipWidth = Math.max(0, rightPinnedStartX - totalLeftPinnedWidth);
+    const rightClipWidth = Math.max(0, width - rightPinnedStartX);
+
+    // ------------------------------------------------------------------------
+    // PASS 1: CENTER SCROLLABLE HEADERS
+    // ------------------------------------------------------------------------
+    if (geometry.centerColumns.length > 0 && centerClipWidth > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(totalLeftPinnedWidth, 0, centerClipWidth, headerH);
+      ctx.clip();
+
+      ctx.fillStyle = theme.canvas.headerBg;
+      ctx.fillRect(totalLeftPinnedWidth, 0, centerClipWidth, headerH);
+
+      // 1a. Center Column Group Bands (Top Band)
+      if (hasGroups) {
+        this.renderColumnGroupBands(
+          ctx,
+          geometry.centerColumns,
+          geometry.leftPinnedColumns.length,
+          (idx) => totalLeftPinnedWidth + geometry.centerColOffsets[idx] - scrollLeft,
+          groupH,
+          theme,
+          normSel,
+          geometry,
+          totalLeftPinnedWidth,
+          rightPinnedStartX
+        );
+      }
+
+      // 1b. Center Individual Column Headers
+      for (let i = 0; i < geometry.centerColumns.length; i++) {
+        const col = geometry.centerColumns[i];
+        const colIdx = geometry.leftPinnedColumns.length + i;
+        const x = totalLeftPinnedWidth + geometry.centerColOffsets[i] - scrollLeft;
+        const groupDef = hasGroups ? geometry.getColumnGroup(col) : undefined;
+        const colStyle = ColumnColorEngine.resolveColumnStyle(col, groupDef, theme.isDark);
+        const colY = groupDef ? groupH : 0;
+        const colH = groupDef ? colHeaderH : headerH;
+
+        this.renderSingleHeader(
+          ctx,
+          col,
+          colIdx,
+          x,
+          colY,
+          col.width,
+          colH,
+          theme,
+          sortRules,
+          colIdx >= normSel.minCol && colIdx <= normSel.maxCol,
+          hoveredFilterColIndex === colIdx,
+          activeFilterColumnIds?.has(col.id) ?? false,
+          store.isColumnDirty?.(col.id) ?? false,
+          permissions,
+          selectionMode,
+          selectedRowKeys?.size || 0,
+          rowCount,
+          colStyle,
+          Boolean(groupDef)
+        );
+      }
+      ctx.restore();
+    }
+
+    // ------------------------------------------------------------------------
+    // PASS 2: LEFT PINNED HEADERS & TOP-LEFT CORNER BOX
+    // ------------------------------------------------------------------------
     ctx.save();
     ctx.beginPath();
-    ctx.rect(geometry.totalFrozenWidth, 0, Math.max(0, width - geometry.totalFrozenWidth), headerH);
+    ctx.rect(0, 0, totalLeftPinnedWidth, headerH);
     ctx.clip();
 
     ctx.fillStyle = theme.canvas.headerBg;
-    ctx.fillRect(geometry.totalFrozenWidth, 0, Math.max(0, width - geometry.totalFrozenWidth), headerH);
+    ctx.fillRect(0, 0, totalLeftPinnedWidth, headerH);
 
-    // 1a. Scrollable Column Group Bands (Top Band)
-    if (hasGroups) {
+    const leftXOffsets: number[] = [];
+    let accLeftX = rowNumW;
+    for (let i = 0; i < geometry.leftPinnedColumns.length; i++) {
+      leftXOffsets.push(accLeftX);
+      accLeftX += geometry.leftPinnedColumns[i].width;
+    }
+
+    // 2a. Left Pinned Column Group Bands (Top Band)
+    if (hasGroups && geometry.leftPinnedColumns.length > 0) {
       this.renderColumnGroupBands(
         ctx,
-        geometry.scrollableColumns,
-        geometry.frozenColumns.length,
-        (idx) => geometry.totalFrozenWidth + geometry.scrollableColOffsets[idx] - scrollLeft,
-        groupH,
-        theme,
-        normSel,
-        geometry,
-        geometry.totalFrozenWidth,
-        width
-      );
-    }
-
-    // 1b. Scrollable Individual Column Headers
-    for (let i = 0; i < geometry.scrollableColumns.length; i++) {
-      const col = geometry.scrollableColumns[i];
-      const colIdx = geometry.frozenColumns.length + i;
-      const x = geometry.totalFrozenWidth + geometry.scrollableColOffsets[i] - scrollLeft;
-      const groupDef = hasGroups ? geometry.getColumnGroup(col) : undefined;
-      const colStyle = ColumnColorEngine.resolveColumnStyle(col, groupDef, theme.isDark);
-      const colY = groupDef ? groupH : 0;
-      const colH = groupDef ? colHeaderH : headerH;
-
-      this.renderSingleHeader(
-        ctx,
-        col,
-        colIdx,
-        x,
-        colY,
-        col.width,
-        colH,
-        theme,
-        sortRules,
-        colIdx >= normSel.minCol && colIdx <= normSel.maxCol,
-        hoveredFilterColIndex === colIdx,
-        activeFilterColumnIds?.has(col.id) ?? false,
-        store.isColumnDirty?.(col.id) ?? false,
-        permissions,
-        selectionMode,
-        selectedRowKeys?.size || 0,
-        rowCount,
-        colStyle,
-        Boolean(groupDef)
-      );
-    }
-    ctx.restore();
-
-    // 2. FROZEN HEADERS
-    const frozenXOffsets: number[] = [];
-    let accFrozenX = rowNumW;
-    for (let i = 0; i < geometry.frozenColumns.length; i++) {
-      frozenXOffsets.push(accFrozenX);
-      accFrozenX += geometry.frozenColumns[i].width;
-    }
-
-    let curX = rowNumW;
-    for (let i = 0; i < geometry.frozenColumns.length; i++) {
-      const col = geometry.frozenColumns[i];
-      ctx.fillStyle = theme.canvas.headerBg;
-      ctx.fillRect(curX, 0, col.width, headerH);
-      curX += col.width;
-    }
-
-    // 2a. Frozen Column Group Bands (Top Band)
-    if (hasGroups && geometry.frozenColumns.length > 0) {
-      this.renderColumnGroupBands(
-        ctx,
-        geometry.frozenColumns,
+        geometry.leftPinnedColumns,
         0,
-        (idx) => frozenXOffsets[idx],
+        (idx) => leftXOffsets[idx],
         groupH,
         theme,
         normSel,
         geometry,
         rowNumW,
-        geometry.totalFrozenWidth
+        totalLeftPinnedWidth
       );
     }
 
-    // 2b. Frozen Individual Column Headers
-    curX = rowNumW;
-    for (let i = 0; i < geometry.frozenColumns.length; i++) {
-      const col = geometry.frozenColumns[i];
+    // 2b. Left Pinned Individual Column Headers
+    let curLeftX = rowNumW;
+    for (let i = 0; i < geometry.leftPinnedColumns.length; i++) {
+      const col = geometry.leftPinnedColumns[i];
       const groupDef = hasGroups ? geometry.getColumnGroup(col) : undefined;
       const colStyle = ColumnColorEngine.resolveColumnStyle(col, groupDef, theme.isDark);
       const colY = groupDef ? groupH : 0;
@@ -890,7 +989,7 @@ export class CanvasRenderer {
         ctx,
         col,
         i,
-        curX,
+        curLeftX,
         colY,
         col.width,
         colH,
@@ -907,10 +1006,10 @@ export class CanvasRenderer {
         colStyle,
         Boolean(groupDef)
       );
-      curX += col.width;
+      curLeftX += col.width;
     }
 
-    // 3. TOP-LEFT CORNER BOX (Select All)
+    // 2c. Top-Left Corner Box (Select All)
     ctx.fillStyle = theme.canvas.rowNumberBg;
     ctx.fillRect(0, 0, rowNumW, headerH);
     ctx.strokeStyle = theme.canvas.headerBorder;
@@ -925,11 +1024,79 @@ export class CanvasRenderer {
     ctx.closePath();
     ctx.fill();
 
-    // Frozen header divider shadow
-    if (geometry.frozenColumns.length > 0) {
-      ctx.save();
+    // Divider shadow on right edge of Left Pinned header
+    if (geometry.leftPinnedColumns.length > 0) {
       ctx.fillStyle = theme.canvas.frozenDividerShadow;
-      ctx.fillRect(geometry.totalFrozenWidth, 0, 3, headerH);
+      ctx.fillRect(totalLeftPinnedWidth - 1, 0, 3, headerH);
+    }
+    ctx.restore();
+
+    // ------------------------------------------------------------------------
+    // PASS 3: RIGHT PINNED HEADERS
+    // ------------------------------------------------------------------------
+    if (geometry.rightPinnedColumns.length > 0 && rightClipWidth > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(rightPinnedStartX, 0, rightClipWidth, headerH);
+      ctx.clip();
+
+      ctx.fillStyle = theme.canvas.headerBg;
+      ctx.fillRect(rightPinnedStartX, 0, rightClipWidth, headerH);
+
+      const baseRightIdx = geometry.leftPinnedColumns.length + geometry.centerColumns.length;
+
+      // 3a. Right Pinned Column Group Bands (Top Band)
+      if (hasGroups) {
+        this.renderColumnGroupBands(
+          ctx,
+          geometry.rightPinnedColumns,
+          baseRightIdx,
+          (idx) => rightPinnedStartX + geometry.rightColOffsets[idx],
+          groupH,
+          theme,
+          normSel,
+          geometry,
+          rightPinnedStartX,
+          width
+        );
+      }
+
+      // 3b. Right Pinned Individual Column Headers
+      for (let i = 0; i < geometry.rightPinnedColumns.length; i++) {
+        const col = geometry.rightPinnedColumns[i];
+        const colIdx = baseRightIdx + i;
+        const x = rightPinnedStartX + geometry.rightColOffsets[i];
+        const groupDef = hasGroups ? geometry.getColumnGroup(col) : undefined;
+        const colStyle = ColumnColorEngine.resolveColumnStyle(col, groupDef, theme.isDark);
+        const colY = groupDef ? groupH : 0;
+        const colH = groupDef ? colHeaderH : headerH;
+
+        this.renderSingleHeader(
+          ctx,
+          col,
+          colIdx,
+          x,
+          colY,
+          col.width,
+          colH,
+          theme,
+          sortRules,
+          colIdx >= normSel.minCol && colIdx <= normSel.maxCol,
+          hoveredFilterColIndex === colIdx,
+          activeFilterColumnIds?.has(col.id) ?? false,
+          store.isColumnDirty?.(col.id) ?? false,
+          permissions,
+          selectionMode,
+          selectedRowKeys?.size || 0,
+          rowCount,
+          colStyle,
+          Boolean(groupDef)
+        );
+      }
+
+      // Divider shadow on left edge of Right Pinned header
+      ctx.fillStyle = theme.canvas.frozenDividerShadow;
+      ctx.fillRect(rightPinnedStartX - 2, 0, 3, headerH);
       ctx.restore();
     }
   }
