@@ -48,6 +48,7 @@ import { initDefaultColumnPlugins } from '../columns/initPlugins';
 import { ColumnTypeRegistry } from '../columns/ColumnTypeRegistry';
 import { CellEditorRegistry } from '../editing/CellEditorRegistry';
 import { LocaleEngine, LocaleInput, IGridLocale } from '../i18n/LocaleEngine';
+import { RowGroupingEngine, isGroupRow, GroupedRow } from '../utils/grouping/RowGroupingEngine';
 
 export interface SheetGLProps {
   dataSource: any[] | IDataStore;
@@ -127,6 +128,13 @@ export interface SheetGLProps {
   onCloneRow?: (rowIndex: number, rowData: Record<string, any>) => void | Promise<void>;
   onViewRowDetail?: (rowIndex: number, rowData: Record<string, any>) => void;
   onRefresh?: () => void;
+
+  /** Enterprise Row Grouping: list of column field keys to group rows by */
+  groupBy?: string[];
+  /** Enterprise Row Grouping: set or array of expanded group node keys */
+  expandedGroupKeys?: Set<string> | string[];
+  /** Callback fired when a group row is expanded or collapsed */
+  onGroupExpansionChanged?: (expandedKeys: Set<string>) => void;
 
   style?: React.CSSProperties;
   className?: string;
@@ -220,6 +228,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     storageKey,
     onScrollChange,
     onExport,
+    groupBy: userGroupBy = [],
+    expandedGroupKeys: userExpandedGroupKeys,
+    onGroupExpansionChanged,
     style,
     className,
   },
@@ -262,6 +273,85 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   useEffect(() => {
     store.setBatchMode?.(batchEditMode);
   }, [store, batchEditMode]);
+
+  // 2b. Enterprise Row Grouping Pipeline (RowGroupingEngine)
+  const [internalGroupBy, setInternalGroupBy] = useState<string[]>(userGroupBy || []);
+  const [internalExpandedGroupKeys, setInternalExpandedGroupKeys] = useState<Set<string>>(
+    () => new Set(userExpandedGroupKeys || [])
+  );
+  const [groupVersion, setGroupVersion] = useState<number>(0);
+
+  useEffect(() => {
+    if (userGroupBy) {
+      setInternalGroupBy(userGroupBy);
+    }
+  }, [userGroupBy]);
+
+  useEffect(() => {
+    if (userExpandedGroupKeys) {
+      setInternalExpandedGroupKeys(new Set(userExpandedGroupKeys));
+    }
+  }, [userExpandedGroupKeys]);
+
+  const toggleGroupKey = useCallback(
+    (groupKey: string) => {
+      setInternalExpandedGroupKeys((prev) => {
+        const next = new Set(prev);
+        if (next.has(groupKey)) {
+          next.delete(groupKey);
+        } else {
+          next.add(groupKey);
+        }
+        onGroupExpansionChanged?.(next);
+        return next;
+      });
+      setGroupVersion((v) => v + 1);
+      requestRenderRef.current();
+    },
+    [onGroupExpansionChanged]
+  );
+
+  const groupedVirtualRows = useMemo<GroupedRow[] | null>(() => {
+    if (!internalGroupBy || internalGroupBy.length === 0) return null;
+
+    const rawRows: any[] = [];
+    const count = store.getRowCount();
+    for (let i = 0; i < count; i++) {
+      const vr = store.getViewRow(i);
+      if (!vr) continue;
+      if (vr.type === 'data') {
+        rawRows.push(vr.data);
+      } else if (!(vr as any).__isGroup) {
+        rawRows.push((vr as any).data || vr);
+      }
+    }
+
+    return RowGroupingEngine.transform(rawRows, internalGroupBy, {
+      expandedKeys: internalExpandedGroupKeys,
+      defaultExpanded: true,
+    });
+  }, [store, groupVersion, internalGroupBy, internalExpandedGroupKeys]);
+
+  const effectiveStore = useMemo<IDataStore>(() => {
+    if (!groupedVirtualRows) return store;
+
+    return {
+      ...store,
+      getRowCount: () => groupedVirtualRows.length,
+      getViewRow: (index: number) => {
+        const item = groupedVirtualRows[index];
+        if (!item) return undefined;
+        if ((item as any).__isGroup) {
+          return item as any;
+        }
+        return {
+          type: 'data',
+          rawIndex: (item as any).__rawIndex ?? index,
+          data: item,
+        } as any;
+      },
+    };
+  }, [store, groupedVirtualRows]);
 
   // 3. Theme Resolution
   const [currentThemeName, setCurrentThemeName] = useState<ThemeInput>(userTheme);
@@ -460,7 +550,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     columnGroups,
     groupHeaderHeight,
     rowSelectionMode,
-    rowCount: store.getRowCount(),
+    rowCount: effectiveStore.getRowCount(),
     onRequestRender: () => requestRenderRef.current(),
     onActiveOverlayClear: () => setActiveOverlay(null),
     onColumnResize,
@@ -569,6 +659,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   useEffect(() => {
     const handleLoaded = () => {
       setStoreVersion((v) => v + 1);
+      setGroupVersion((v) => v + 1);
     };
     store.on('loaded', handleLoaded);
     return () => store.off('loaded', handleLoaded);
@@ -703,7 +794,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       CanvasRenderer.render({
         canvas: canvasRef.current,
         geometry: geometryRef.current,
-        store,
+        store: effectiveStore,
         selection: selectionRef.current,
         theme: resolvedTheme,
         locale: currentLocale,
@@ -723,7 +814,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       });
     });
   }, [
-    store,
+    effectiveStore,
     resolvedTheme,
     currentLocale,
     sortRules,
@@ -747,7 +838,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       selectCell,
       selectRange,
       clearSelection,
-      selectAll: () => selectAll(store.getRowCount(), geometryRef.current.columns.length),
+      selectAll: () => selectAll(effectiveStore.getRowCount(), geometryRef.current.columns.length),
       getActiveCell,
       getSelectedRange,
       ensureCellVisible,
@@ -779,7 +870,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       setColumnWidth: handleSetColumnWidth,
       getColumnWidth: handleGetColumnWidth,
       getTotalWidth,
-      getTotalHeight: () => getTotalHeight(store.getRowCount()),
+      getTotalHeight: () => getTotalHeight(effectiveStore.getRowCount()),
       startEditingCell: (col: number, row: number, initialChar?: string) => {
         openEditorRef.current(row, col, initialChar);
       },
@@ -797,7 +888,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       selectRange,
       clearSelection,
       selectAll,
-      store,
+      effectiveStore,
       getActiveCell,
       getSelectedRange,
       ensureCellVisible,
@@ -813,7 +904,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
   useEffect(() => {
     requestRender();
-  }, [requestRender, resolvedTheme, currentLocale, storeVersion, effectiveColumns, selectionVersion, rowSelectionMode, selectedRowKeysSet]);
+  }, [requestRender, resolvedTheme, currentLocale, storeVersion, groupVersion, effectiveColumns, selectionVersion, rowSelectionMode, selectedRowKeysSet, effectiveStore]);
 
   // 6c. PDF Preview Custom Event Listener
   useEffect(() => {
@@ -2318,17 +2409,26 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       return;
     }
 
-    // C2. Group Row Click (Works anywhere across the group row, including the left ▶/▼ chevron!)
+    // C2. Group Row Click (Works anywhere across the group row, including the left toggle button!)
     if (y > geom.headerHeight) {
       const clickedRowIdx = Math.floor((y - geom.headerHeight + st) / geom.rowHeight);
       if (clickedRowIdx >= 0 && clickedRowIdx < rowCount) {
-        const clickedVRow = store.getViewRow(clickedRowIdx);
-        if (clickedVRow && clickedVRow.type === 'group') {
-          store.toggleGroup(clickedVRow.groupKey);
-          setStoreVersion((v) => v + 1);
-          requestRender();
-          containerRef.current?.focus();
-          return;
+        const clickedVRow = effectiveStore.getViewRow(clickedRowIdx);
+        const isGroup = Boolean(
+          (clickedVRow as any)?.__isGroup ||
+          clickedVRow?.type === 'group' ||
+          (clickedVRow as any)?.data?.__isGroup
+        );
+        if (isGroup) {
+          const gKey = (clickedVRow as any)?.groupKey || (clickedVRow as any)?.data?.groupKey;
+          if (gKey) {
+            toggleGroupKey(gKey);
+            store.toggleGroup?.(gKey);
+            setStoreVersion((v) => v + 1);
+            requestRender();
+            containerRef.current?.focus();
+            return;
+          }
         }
       }
     }
@@ -2385,11 +2485,22 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     const hit = geom.hitTest(x, y, sl, st, rowCount);
     if (!hit) return;
 
-    const vRow = store.getViewRow(hit.row);
+    const vRow = effectiveStore.getViewRow(hit.row);
     // Group Header Expand/Collapse
-    if (vRow && vRow.type === 'group') {
-      store.toggleGroup(vRow.groupKey);
-      return;
+    const isGroupHit = Boolean(
+      (vRow as any)?.__isGroup ||
+      vRow?.type === 'group' ||
+      (vRow as any)?.data?.__isGroup
+    );
+    if (isGroupHit) {
+      const gKey = (vRow as any)?.groupKey || (vRow as any)?.data?.groupKey;
+      if (gKey) {
+        toggleGroupKey(gKey);
+        store.toggleGroup?.(gKey);
+        setStoreVersion((v) => v + 1);
+        requestRender();
+        return;
+      }
     }
 
     const colDef = geom.columns[hit.col];
@@ -3415,14 +3526,14 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           <div
             style={{
               width: getTotalWidth(),
-              height: getTotalHeight(store.getRowCount()),
+              height: getTotalHeight(effectiveStore.getRowCount()),
               pointerEvents: 'none',
             }}
           />
         </div>
 
         {/* Right-Side Scroll Indicator Pill & Quick Jump Buttons */}
-        {scrollIndicator.visible && store.getRowCount() > 30 && (
+        {scrollIndicator.visible && effectiveStore.getRowCount() > 30 && (
           <div
             style={{
               position: 'absolute',

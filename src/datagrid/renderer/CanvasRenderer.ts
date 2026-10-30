@@ -147,17 +147,24 @@ export class CanvasRenderer {
           continue;
         }
 
-        if (vRow.type === 'group') {
-          GroupRowPainter.paintGroupRow(
+        if (vRow.type === 'group' || (vRow as any).__isGroup || (vRow as any).data?.__isGroup) {
+          const groupData = (vRow as any)?.__isGroup
+            ? (vRow as any)
+            : (vRow as any)?.data?.__isGroup
+            ? (vRow as any).data
+            : vRow;
+
+          CanvasRenderer.paintGroupRowBand(
             ctx,
-            vRow,
+            groupData,
             rowY,
             width,
             rowH,
             theme,
             locale,
             geometry.columns,
-            hoveredCell?.row === r
+            hoveredCell?.row === r,
+            rowNumW
           );
           continue;
         }
@@ -1298,6 +1305,107 @@ export class CanvasRenderer {
       ctx.closePath();
       ctx.fill();
       ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Paints a full-width Group Row Band with expand/collapse toggle and level indentation.
+   */
+  public static paintGroupRowBand(
+    ctx: CanvasRenderingContext2D,
+    row: any,
+    y: number,
+    width: number,
+    height: number,
+    theme: IGridThemeTokens,
+    locale: IGridLocale,
+    columns?: ColumnDef[],
+    isHovered?: boolean,
+    rowNumW: number = 54
+  ): void {
+    ctx.save();
+
+    // 1. Full-width Group Row Band Background (slightly darker like header / groupRowBg)
+    ctx.fillStyle = isHovered
+      ? theme.isDark
+        ? 'rgba(56, 189, 248, 0.16)'
+        : 'rgba(2, 132, 199, 0.10)'
+      : theme.canvas.groupRowBg || theme.canvas.headerBg;
+    ctx.fillRect(0, y, width, height);
+
+    // 2. Bottom Border
+    ctx.strokeStyle = theme.canvas.groupRowBorder || theme.canvas.headerBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, y + height - 0.5);
+    ctx.lineTo(width, y + height - 0.5);
+    ctx.stroke();
+
+    const level = row.level ?? 0;
+    const isExpanded = Boolean(row.isExpanded);
+    const field = row.groupField || row.field || '';
+    const val = row.groupValue !== undefined ? row.groupValue : (row.value ?? '');
+    const count = row.childrenCount ?? row.rowCount ?? 0;
+
+    // 3. Left Accent Bar by Level
+    ctx.fillStyle = theme.dom.accentColor;
+    ctx.fillRect(level * 6, y, 4, height);
+
+    // 4. Expand/Collapse toggle ([-] or [+])
+    // Indent the text and icon horizontally based on row.level
+    const leftOffset = Math.max(rowNumW, 20);
+    const indent = leftOffset + (level * 20);
+    const midY = y + height / 2;
+    const boxSize = 16;
+
+    ctx.fillStyle = isExpanded
+      ? theme.dom.accentColor
+      : theme.isDark
+      ? 'rgba(255,255,255,0.12)'
+      : 'rgba(0,0,0,0.08)';
+    ctx.beginPath();
+    ctx.roundRect(indent - boxSize / 2, midY - boxSize / 2, boxSize, boxSize, 3);
+    ctx.fill();
+
+    ctx.fillStyle = isExpanded ? '#FFFFFF' : theme.canvas.groupRowText;
+    ctx.font = `700 13px ${theme.fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(isExpanded ? '−' : '+', indent, midY);
+
+    // 5. Group Title: `${row.groupField}: ${row.groupValue} (${row.childrenCount})`
+    const colDef = columns?.find((c) => c.id === field);
+    const colTitle = colDef ? colDef.title.replace(' ⚡', '') : field.toUpperCase();
+    const displayVal = String(val ?? (locale?.emptyText || '(Blank)'));
+    const title = `${colTitle}: ${displayVal} (${count})`;
+
+    ctx.fillStyle = theme.canvas.groupRowText;
+    ctx.font = `700 ${theme.fontSize}px ${theme.fontFamily}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(title, indent + boxSize / 2 + 10, midY);
+
+    // 6. Optional Column Aggregations on Right Side
+    const aggs = row.aggregations || row.summaries;
+    if (aggs && Object.keys(aggs).length > 0) {
+      const summaryText = Object.entries(aggs)
+        .slice(0, 4)
+        .map(([k, v]) => {
+          const sCol = columns?.find((c) => c.id === k);
+          const sTitle = sCol ? sCol.title.replace(' ⚡', '') : k;
+          const numStr = Number(v).toLocaleString(locale?.code || 'en-US', {
+            maximumFractionDigits: 2,
+          });
+          return `${sTitle}: ${sCol?.currencySymbol || ''}${numStr}`;
+        })
+        .join('   •   ');
+
+      ctx.fillStyle = theme.isDark ? '#98989D' : '#6E6E73';
+      ctx.font = `600 ${theme.fontSize - 1}px ${theme.fontFamily}`;
+      ctx.textAlign = 'right';
+      ctx.fillText(summaryText, width - 24, midY);
     }
 
     ctx.restore();
