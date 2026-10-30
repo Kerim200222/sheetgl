@@ -46,6 +46,7 @@ import { MaterialIcon } from './MaterialIcon';
 import { LocalDataStore } from '../data/LocalDataStore';
 import { initDefaultColumnPlugins } from '../columns/initPlugins';
 import { ColumnTypeRegistry } from '../columns/ColumnTypeRegistry';
+import { CellEditorRegistry } from '../editing/CellEditorRegistry';
 import { LocaleEngine, LocaleInput, IGridLocale } from '../i18n/LocaleEngine';
 
 export interface SheetGLProps {
@@ -737,10 +738,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   ]);
 
   requestRenderRef.current = requestRender;
+  const openEditorRef = useRef<(row: number, col: number, initialChar?: string) => void>(() => {});
 
   // 6b. Expose Imperative GridApi
-  useImperativeHandle(
-    ref,
+  const gridApi = useMemo<GridApi>(
     (): GridApi => ({
       requestRender,
       selectCell,
@@ -779,6 +780,16 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       getColumnWidth: handleGetColumnWidth,
       getTotalWidth,
       getTotalHeight: () => getTotalHeight(store.getRowCount()),
+      startEditingCell: (col: number, row: number, initialChar?: string) => {
+        openEditorRef.current(row, col, initialChar);
+      },
+      stopEditingCell: (cancel?: boolean) => {
+        if (cancel) {
+          setEditorValidationError(null);
+          setIsEditorValidating(false);
+          setActiveOverlay(null);
+        }
+      },
     }),
     [
       requestRender,
@@ -797,6 +808,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       getTotalHeight,
     ]
   );
+
+  useImperativeHandle(ref, () => gridApi, [gridApi]);
 
   useEffect(() => {
     requestRender();
@@ -2058,44 +2071,60 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   // ============================================================================
   // OPEN INLINE MICRO-DOM EDITOR
   // ============================================================================
-  const openEditorForCell = (row: number, col: number, initialChar?: string) => {
-    const geom = geometryRef.current;
-    const colDef = geom.columns[col];
-    const vRow = store.getViewRow(row);
-    if (!vRow || vRow.type === 'group') return;
+  const openEditorForCell = useCallback(
+    (row: number, col: number, initialChar?: string) => {
+      const geom = geometryRef.current;
+      const colDef = geom.columns[col];
+      const vRow = store.getViewRow(row);
+      if (!vRow || vRow.type === 'group' || !colDef) return;
 
-    if (colDef?.type === 'sparkline') {
-      setSparklineModal({
-        rowIndex: row,
-        rowData: vRow.data,
+      if (colDef.type === 'sparkline') {
+        setSparklineModal({
+          rowIndex: row,
+          rowData: vRow.data,
+          column: colDef,
+          points: Array.isArray(vRow.data[colDef.id]) ? vRow.data[colDef.id] : [],
+        });
+        return;
+      }
+
+      if (!canEditCell(vRow.data, colDef, row, false)) return;
+
+      // Check if custom editor, registry editor, legacy plugin editor, or default editor is available
+      const hasCustomEditor = Boolean(colDef.editor) || CellEditorRegistry.has(colDef.type);
+      const plugin = ColumnTypeRegistry.get(colDef.type);
+      const hasPluginEditor = Boolean(plugin?.editorComponent);
+      const isSpecialInteractive = colDef.type === 'action' || colDef.type === 'pdf';
+      if (isSpecialInteractive && !hasCustomEditor && !hasPluginEditor) return;
+
+      const screenRect = geom.getColumnScreenRect(col, scrollPosRef.current.left);
+      const y = geom.headerHeight + row * geom.rowHeight - scrollPosRef.current.top;
+
+      setEditorValidationError(null);
+      setIsEditorValidating(false);
+      setActiveOverlay({
+        row,
+        col,
+        x: screenRect.x,
+        y,
+        width: screenRect.width,
+        height: geom.rowHeight,
         column: colDef,
-        points: Array.isArray(vRow.data[colDef.id]) ? vRow.data[colDef.id] : [],
+        initialValue: vRow.data[colDef.id],
+        initialChar,
       });
-      return;
-    }
+    },
+    [canEditCell, store]
+  );
 
-    if (!canEditCell(vRow.data, colDef, row, false)) return;
+  openEditorRef.current = openEditorForCell;
 
-    const plugin = ColumnTypeRegistry.get(colDef.type);
-    if (!plugin.editorComponent) return;
-
-    const screenRect = geom.getColumnScreenRect(col, scrollPosRef.current.left);
-    const y = geom.headerHeight + row * geom.rowHeight - scrollPosRef.current.top;
-
-    setEditorValidationError(null);
-    setIsEditorValidating(false);
-    setActiveOverlay({
-      row,
-      col,
-      x: screenRect.x,
-      y,
-      width: screenRect.width,
-      height: geom.rowHeight,
-      column: colDef,
-      initialValue: vRow.data[colDef.id],
-      initialChar,
-    });
-  };
+  const startEditingCell = useCallback(
+    (col: number, row: number, initialChar?: string) => {
+      openEditorForCell(row, col, initialChar);
+    },
+    [openEditorForCell]
+  );
 
   // ============================================================================
   // VIEWPORT MOUSE EVENTS (FIXED COORDINATE SYSTEM)
@@ -2492,7 +2521,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     if (!hit) return;
 
     setIsDraggingSelection(false);
-    openEditorForCell(hit.row, hit.col);
+    startEditingCell(hit.col, hit.row);
   };
 
   const handleSurfaceContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -3047,12 +3076,28 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       case 'Enter':
       case 'F2':
         e.preventDefault();
-        openEditorForCell(row, col);
+        startEditingCell(col, row);
         break;
       case 'Delete':
       case 'Backspace':
         e.preventDefault();
         handleClearSelectedCells();
+        break;
+      default:
+        // Intercept standard alphanumeric/printable characters typed on active cell
+        if (
+          !e.ctrlKey &&
+          !e.metaKey &&
+          !e.altKey &&
+          e.key.length === 1 &&
+          colDef &&
+          vRow &&
+          vRow.type === 'data' &&
+          canEditCell(vRow.data, colDef, row, true)
+        ) {
+          e.preventDefault();
+          startEditingCell(col, row, e.key);
+        }
         break;
     }
   };
@@ -3504,8 +3549,13 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         {activeOverlay && (
           <DynamicCellEditor
             overlay={activeOverlay}
+            rowData={(() => {
+              const vr = store.getViewRow(activeOverlay.row);
+              return vr && vr.type === 'data' ? vr.data : undefined;
+            })()}
             theme={resolvedTheme}
             locale={currentLocale}
+            api={gridApi}
             validationError={editorValidationError}
             isValidating={isEditorValidating}
             onCommit={async (newVal, moveDir) => {
@@ -3544,6 +3594,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
                 if (effectiveDir === 'down') {
                   moveSelection(1, 0);
+                  ensureCellVisible(targetRow + 1, activeOverlay.col);
+                } else if (effectiveDir === 'up') {
+                  moveSelection(-1, 0);
+                  ensureCellVisible(Math.max(0, targetRow - 1), activeOverlay.col);
                 } else if (effectiveDir === 'right') {
                   const geom = geometryRef.current;
                   let nextCol = activeOverlay.col + 1;
@@ -3557,8 +3611,13 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
                   if (nextCol < geom.columns.length) {
                     const dCol = nextCol - activeOverlay.col;
                     moveSelection(0, dCol);
+                    ensureCellVisible(targetRow, nextCol);
                   } else {
                     moveSelection(0, 1);
+                    ensureCellVisible(
+                      targetRow,
+                      Math.min(geom.columns.length - 1, activeOverlay.col + 1)
+                    );
                   }
                 } else if (effectiveDir === 'left') {
                   const geom = geometryRef.current;
@@ -3573,8 +3632,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
                   if (prevCol >= 0) {
                     const dCol = prevCol - activeOverlay.col;
                     moveSelection(0, dCol);
+                    ensureCellVisible(targetRow, prevCol);
                   } else {
                     moveSelection(0, -1);
+                    ensureCellVisible(targetRow, Math.max(0, activeOverlay.col - 1));
                   }
                 } else {
                   requestRender();

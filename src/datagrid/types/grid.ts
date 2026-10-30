@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import { SummaryType } from './group';
 import { BatchChanges, IDataStore } from './store';
 
@@ -279,6 +280,8 @@ export interface ColumnDef {
   headerTooltip?: string;
   defaultValue?: any;
   summaryType?: SummaryType;
+  /** Custom editor identifier (registered in CellEditorRegistry) or custom React editor component */
+  editor?: string | ComponentType<any>;
 
   /**
    * Banded Column Group assignment: can be a group ID / group title string,

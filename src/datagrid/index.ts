@@ -93,3 +93,16 @@ export { PdfPreviewModalOverlay } from './overlays/PdfPreviewModalOverlay';
 export type { PdfPreviewModalState, PdfPreviewModalOverlayProps } from './overlays/PdfPreviewModalOverlay';
 export { normalizeMultiValue } from './columns/types/MultiSelectColumn/MultiSelectPainter';
 
+export { useGridEditing } from './hooks/useGridEditing';
+export type {
+  UseGridEditingOptions,
+  UseGridEditingReturn,
+  StartEditingOptions,
+} from './hooks/useGridEditing';
+
+export { CellEditorRegistry, DefaultCellEditor } from './editing';
+export type {
+  ICellEditorProps,
+  CellCommitDirection,
+  CellEditorComponent,
+} from './editing';
