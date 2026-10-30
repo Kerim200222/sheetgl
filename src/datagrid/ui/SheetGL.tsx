@@ -21,6 +21,7 @@ import {
   RowRemovedEvent,
   SavingEvent,
   SavedEvent,
+  ColumnDragState,
 } from '../types/grid';
 import { IDataStore, BatchChanges, RemoteOperationsConfig } from '../types/store';
 import { ColumnFilterState, FilterDescriptor, SortDescriptor } from '../types/filter';
@@ -29,6 +30,7 @@ import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ThemeEngine, ThemeInput } from '../theme/ThemeEngine';
 import { GeometryEngine } from '../core/GeometryEngine';
 import { SelectionModel } from '../core/SelectionModel';
+import { ColumnManager } from '../core/ColumnManager';
 import { HistoryManager } from '../core/HistoryManager';
 import { ValidationEngine } from '../core/ValidationEngine';
 import { CanvasRenderer } from '../renderer/CanvasRenderer';
@@ -127,6 +129,14 @@ export interface SheetGLProps {
   onCloneRow?: (rowIndex: number, rowData: Record<string, any>) => void | Promise<void>;
   onViewRowDetail?: (rowIndex: number, rowData: Record<string, any>) => void;
   onRefresh?: () => void;
+  /** Array or Set of column IDs to hide from rendering */
+  hiddenColumns?: string[] | Set<string>;
+  /** Array of column IDs defining the visual ordering of columns */
+  columnOrder?: string[];
+  /** Callback fired when the visual order of columns changes */
+  onColumnOrderChange?: (newOrder: string[]) => void;
+  /** Callback fired when a column's visibility changes */
+  onColumnVisibilityChange?: (columnId: string, visible: boolean, hiddenColumns: string[]) => void;
 
   style?: React.CSSProperties;
   className?: string;
@@ -217,6 +227,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     remoteOperations,
     onFilterChange,
     onColumnResize,
+    hiddenColumns,
+    columnOrder,
+    onColumnOrderChange,
+    onColumnVisibilityChange,
     storageKey,
     onScrollChange,
     onExport,
@@ -439,6 +453,14 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     updateColumnDef: handleUpdateColumnDef,
     setColumnWidth: handleSetColumnWidth,
     getColumnWidth: handleGetColumnWidth,
+    hiddenColumns: currentHiddenColumns,
+    columnOrder: currentColumnOrder,
+    setColumnVisibility: handleSetColumnVisibility,
+    setColumnOrder: handleSetColumnOrder,
+    moveColumn: handleMoveColumn,
+    hideColumn: handleHideColumn,
+    showColumn: handleShowColumn,
+    toggleColumnVisibility: handleToggleColumnVisibility,
     resizingCol,
     setResizingCol,
     scrollPosRef,
@@ -687,6 +709,18 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     [columnFilters]
   );
 
+  // 5c. Column Drag & Drop Reordering State
+  const [columnDragState, setColumnDragState] = useState<ColumnDragState | null>(null);
+  const columnDragStateRef = useRef<ColumnDragState | null>(null);
+  columnDragStateRef.current = columnDragState;
+  const pendingHeaderDragRef = useRef<{
+    colId: string;
+    colIndex: number;
+    startX: number;
+    startY: number;
+    shiftKey: boolean;
+  } | null>(null);
+
   // 6. 60 FPS Render Loop
   const requestRender = useCallback(() => {
     if (!canvasRef.current) return;
@@ -720,6 +754,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         selectionMode: rowSelectionMode,
         selectedRowKeys: selectedRowKeysSet,
         zebraStriping: zebraStriping ?? rowAlternationEnabled ?? true,
+        columnDragState,
       });
     });
   }, [
@@ -735,10 +770,37 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     selectedRowKeysSet,
     zebraStriping,
     rowAlternationEnabled,
+    columnDragState,
   ]);
 
   requestRenderRef.current = requestRender;
   const openEditorRef = useRef<(row: number, col: number, initialChar?: string) => void>(() => {});
+
+  const autoSizeColumn = useCallback(
+    (columnId: string) => {
+      const geom = geometryRef.current;
+      const col = geom.columns.find((c) => c.id === columnId);
+      if (!col) return;
+      const bestFit = ColumnManager.calculateBestFitWidth(
+        col,
+        store,
+        resolvedTheme,
+        canvasRef.current?.getContext('2d')
+      );
+      handleSetColumnWidth(columnId, bestFit);
+    },
+    [store, resolvedTheme, handleSetColumnWidth]
+  );
+
+  const autoSizeAllColumns = useCallback(() => {
+    const geom = geometryRef.current;
+    const ctx = canvasRef.current?.getContext('2d');
+    geom.columns.forEach((col) => {
+      if (col.id === '__selection__') return;
+      const bestFit = ColumnManager.calculateBestFitWidth(col, store, resolvedTheme, ctx);
+      handleSetColumnWidth(col.id, bestFit);
+    });
+  }, [store, resolvedTheme, handleSetColumnWidth]);
 
   // 6b. Expose Imperative GridApi
   const gridApi = useMemo<GridApi>(
@@ -783,6 +845,13 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       startEditingCell: (col: number, row: number, initialChar?: string) => {
         openEditorRef.current(row, col, initialChar);
       },
+      setColumnVisibility: handleSetColumnVisibility,
+      getHiddenColumns: () => Array.from(currentHiddenColumns),
+      setColumnOrder: handleSetColumnOrder,
+      getColumnOrder: () => [...currentColumnOrder],
+      moveColumn: handleMoveColumn,
+      autoSizeColumn,
+      autoSizeAllColumns,
       stopEditingCell: (cancel?: boolean) => {
         if (cancel) {
           setEditorValidationError(null);
@@ -1865,6 +1934,91 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   };
 
   // ============================================================================
+  // COLUMN DRAG & DROP REORDERING WINDOW EFFECT
+  // ============================================================================
+  useEffect(() => {
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (!pendingHeaderDragRef.current && !columnDragStateRef.current) return;
+      const surface = gridSurfaceRef.current;
+      if (!surface) return;
+      const rect = surface.getBoundingClientRect();
+      const currentX = e.clientX - rect.left;
+      const sl = scrollPosRef.current.left;
+      const geom = geometryRef.current;
+
+      // 1. Check 5px movement threshold before initiating drag
+      if (!columnDragStateRef.current?.draggingColId && pendingHeaderDragRef.current) {
+        const delta = Math.hypot(
+          e.clientX - pendingHeaderDragRef.current.startX,
+          e.clientY - pendingHeaderDragRef.current.startY
+        );
+        if (delta >= 5) {
+          const dropHit = geom.hitTestColumnDropTarget(
+            currentX,
+            sl,
+            pendingHeaderDragRef.current.colId
+          );
+          const nextState: ColumnDragState = {
+            draggingColId: pendingHeaderDragRef.current.colId,
+            dropTargetColId: dropHit?.targetColId || null,
+            dragCurrentX: currentX,
+            dropPosition: dropHit?.position || 'before',
+            dropIndicatorX: dropHit?.indicatorX ?? null,
+          };
+          setColumnDragState(nextState);
+          columnDragStateRef.current = nextState;
+          setCursorStyle('grabbing');
+          requestRender();
+        }
+        return;
+      }
+
+      // 2. Already actively dragging column
+      if (columnDragStateRef.current?.draggingColId) {
+        const draggingId = columnDragStateRef.current.draggingColId;
+        const dropHit = geom.hitTestColumnDropTarget(currentX, sl, draggingId);
+        const nextState: ColumnDragState = {
+          draggingColId: draggingId,
+          dropTargetColId: dropHit?.targetColId || null,
+          dragCurrentX: currentX,
+          dropPosition: dropHit?.position || 'before',
+          dropIndicatorX: dropHit?.indicatorX ?? null,
+        };
+        setColumnDragState(nextState);
+        columnDragStateRef.current = nextState;
+        setCursorStyle('grabbing');
+        requestRender();
+      }
+    };
+
+    const handleWindowMouseUp = () => {
+      if (columnDragStateRef.current?.draggingColId) {
+        const { draggingColId, dropTargetColId, dropPosition } = columnDragStateRef.current;
+        if (draggingColId && dropTargetColId && draggingColId !== dropTargetColId) {
+          handleMoveColumn(draggingColId, dropTargetColId, dropPosition);
+        }
+        setColumnDragState(null);
+        columnDragStateRef.current = null;
+        pendingHeaderDragRef.current = null;
+        setCursorStyle('default');
+        requestRender();
+      } else if (pendingHeaderDragRef.current) {
+        // Did not reach drag threshold; interpret as header click -> sort
+        const { colIndex, shiftKey } = pendingHeaderDragRef.current;
+        pendingHeaderDragRef.current = null;
+        handleHeaderSort(colIndex, shiftKey);
+      }
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [handleMoveColumn, handleHeaderSort, requestRender]);
+
+  // ============================================================================
   // DRAG SELECTION & FILL HANDLE DRAG EFFECT (WITH AUTO-SCROLL AT EDGES)
   // ============================================================================
   useEffect(() => {
@@ -2130,7 +2284,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   // VIEWPORT MOUSE EVENTS (FIXED COORDINATE SYSTEM)
   // ============================================================================
   const handleSurfaceMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (resizingCol || isDraggingSelection || isDraggingRowNumbers || fillDragState) return;
+    if (resizingCol || isDraggingSelection || isDraggingRowNumbers || fillDragState || columnDragState) return;
     const { x, y, onScrollbar } = getViewportCoords(e);
     if (onScrollbar) {
       setCursorStyle('default');
@@ -2311,6 +2465,14 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               height: geom.headerHeight,
             },
           });
+        } else if (headerHit.column.id !== '__selection__') {
+          pendingHeaderDragRef.current = {
+            colId: headerHit.column.id,
+            colIndex: headerHit.colIndex,
+            startX: e.clientX,
+            startY: e.clientY,
+            shiftKey: e.shiftKey,
+          };
         } else {
           handleHeaderSort(headerHit.colIndex, e.shiftKey);
         }
@@ -2509,6 +2671,16 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     const geom = geometryRef.current;
     const sl = scrollPosRef.current.left;
     const st = scrollPosRef.current.top;
+
+    // 1. Double-clicking Column Resize Handle -> Auto-Size / Best-Fit Column!
+    const resizeHit = geom.hitTestColumnResize(x, y, sl);
+    if (resizeHit) {
+      const col = geom.columns[resizeHit.colIndex];
+      if (col && col.id !== '__selection__') {
+        autoSizeColumn(col.id);
+        return;
+      }
+    }
 
     // Double-clicking Fill Handle -> duplicate down!
     const fhHit = geom.hitTestFillHandle(x, y, sl, st, selectionRef.current);

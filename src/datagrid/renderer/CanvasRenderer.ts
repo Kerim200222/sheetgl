@@ -7,7 +7,7 @@ import { GroupRowPainter } from './GroupRowPainter';
 import { SkeletonPainter } from './SkeletonPainter';
 import { SortDescriptor } from '../types/filter';
 import { IGridLocale } from '../i18n/IGridLocale';
-import { ColumnDef, ColumnGroupDef, GridPermissions, RowSelectionMode } from '../types/grid';
+import { ColumnDef, ColumnGroupDef, GridPermissions, RowSelectionMode, ColumnDragState } from '../types/grid';
 import {
   ColumnColorEngine,
   ResolvedColumnStyle,
@@ -34,6 +34,7 @@ export interface RenderParams {
   selectionMode?: RowSelectionMode;
   selectedRowKeys?: Set<any>;
   zebraStriping?: boolean | string | { light: string; dark: string };
+  columnDragState?: ColumnDragState | null;
 }
 
 export class CanvasRenderer {
@@ -779,7 +780,8 @@ export class CanvasRenderer {
     activeFilterColumnIds?: Set<string>,
     permissions?: GridPermissions,
     selectionMode: RowSelectionMode = 'none',
-    selectedRowKeys?: Set<any>
+    selectedRowKeys?: Set<any>,
+    columnDragState?: ColumnDragState | null
   ): void {
     const rowCount = store.getRowCount();
     const hasGroups = geometry.hasColumnGroups;
@@ -821,6 +823,7 @@ export class CanvasRenderer {
       const colY = groupDef ? groupH : 0;
       const colH = groupDef ? colHeaderH : headerH;
 
+      const isScrollableDragged = col.id === columnDragState?.draggingColId;
       this.renderSingleHeader(
         ctx,
         col,
@@ -840,7 +843,8 @@ export class CanvasRenderer {
         selectedRowKeys?.size || 0,
         rowCount,
         colStyle,
-        Boolean(groupDef)
+        Boolean(groupDef),
+        isScrollableDragged
       );
     }
     ctx.restore();
@@ -886,6 +890,7 @@ export class CanvasRenderer {
       const colY = groupDef ? groupH : 0;
       const colH = groupDef ? colHeaderH : headerH;
 
+      const isFrozenDragged = col.id === columnDragState?.draggingColId;
       this.renderSingleHeader(
         ctx,
         col,
@@ -905,7 +910,8 @@ export class CanvasRenderer {
         selectedRowKeys?.size || 0,
         rowCount,
         colStyle,
-        Boolean(groupDef)
+        Boolean(groupDef),
+        isFrozenDragged
       );
       curX += col.width;
     }
@@ -931,6 +937,108 @@ export class CanvasRenderer {
       ctx.fillStyle = theme.canvas.frozenDividerShadow;
       ctx.fillRect(geometry.totalFrozenWidth, 0, 3, headerH);
       ctx.restore();
+    }
+
+    // 4. COLUMN DRAG & DROP OVERLAYS (Indicator Line & Ghost Header)
+    if (columnDragState?.draggingColId) {
+      // 4a. Drop Indicator (Vibrant blue line with directional arrowheads)
+      if (
+        columnDragState.dropIndicatorX != null &&
+        columnDragState.dropIndicatorX >= geometry.rowNumberWidth
+      ) {
+        const indX = Math.round(columnDragState.dropIndicatorX);
+        ctx.save();
+        ctx.strokeStyle = '#0A84FF';
+        ctx.fillStyle = '#0A84FF';
+        ctx.lineWidth = 2.5;
+
+        // Vertical drop line across the header
+        ctx.beginPath();
+        ctx.moveTo(indX, 0);
+        ctx.lineTo(indX, headerH);
+        ctx.stroke();
+
+        // Top triangle arrowhead pointing downward
+        const arrowSize = 4;
+        ctx.beginPath();
+        ctx.moveTo(indX - arrowSize, 0);
+        ctx.lineTo(indX + arrowSize, 0);
+        ctx.lineTo(indX, arrowSize + 2);
+        ctx.closePath();
+        ctx.fill();
+
+        // Bottom triangle arrowhead pointing upward
+        ctx.beginPath();
+        ctx.moveTo(indX - arrowSize, headerH);
+        ctx.lineTo(indX + arrowSize, headerH);
+        ctx.lineTo(indX, headerH - arrowSize - 2);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      // 4b. Floating Ghost Header Card
+      const draggedCol = geometry.columns.find((c) => c.id === columnDragState.draggingColId);
+      if (draggedCol) {
+        ctx.save();
+        const ghostW = Math.max(90, Math.min(draggedCol.width, 240));
+        const ghostH = headerH - 6;
+        const ghostX = Math.max(geometry.rowNumberWidth, columnDragState.dragCurrentX - ghostW / 2);
+        const ghostY = 3;
+
+        // Translucent card with drop shadow
+        ctx.globalAlpha = 0.85;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 4;
+
+        // Card background
+        ctx.fillStyle = theme.canvas.headerBg;
+        ctx.beginPath();
+        ctx.roundRect(ghostX, ghostY, ghostW, ghostH, 6);
+        ctx.fill();
+
+        // Blue border
+        ctx.strokeStyle = '#0A84FF';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Reset shadow before text & icons
+        ctx.shadowColor = 'transparent';
+
+        // Drag grip icon (two columns of dots)
+        ctx.fillStyle = theme.isDark ? '#98989D' : '#8E8E93';
+        for (let row = 0; row < 3; row++) {
+          const dotY = ghostY + ghostH / 2 - 5 + row * 5;
+          ctx.beginPath();
+          ctx.arc(ghostX + 10, dotY, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(ghostX + 14, dotY, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Column title
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(ghostX + 22, ghostY, ghostW - 28, ghostH);
+        ctx.clip();
+
+        ctx.fillStyle = theme.canvas.headerText;
+        ctx.font = `600 ${theme.headerFontSize}px ${theme.fontFamily}`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        const title =
+          typeof draggedCol.title === 'string' && draggedCol.title.trim() !== ''
+            ? draggedCol.title
+            : String(draggedCol.id);
+        ctx.fillText(title, ghostX + 22, ghostY + ghostH / 2);
+        ctx.restore();
+
+        ctx.restore();
+      }
     }
   }
 
@@ -1118,7 +1226,8 @@ export class CanvasRenderer {
     selectedCount: number = 0,
     totalRowCount: number = 0,
     colStyle?: ResolvedColumnStyle,
-    hasParentGroup: boolean = false
+    hasParentGroup: boolean = false,
+    isDragged: boolean = false
   ): void {
     ctx.save();
 
@@ -1297,6 +1406,13 @@ export class CanvasRenderer {
       ctx.lineTo(fx - 1.5, fy + 0.5);
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
+    }
+
+    if (isDragged) {
+      ctx.save();
+      ctx.fillStyle = theme.isDark ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.60)';
+      ctx.fillRect(x, y, w, h);
       ctx.restore();
     }
 
