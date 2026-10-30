@@ -142,8 +142,59 @@ export class CanvasRenderer {
         const rowY = headerH + r * rowH - scrollTop;
         const vRow = store.getViewRow(r);
 
-        if (!vRow) {
-          SkeletonPainter.paintSkeletonCell(ctx, rowNumW, rowY, width - rowNumW, rowH, theme);
+        const isSkeletonRow = !vRow || Boolean((vRow as any)?.data?.__isLoading || (vRow as any)?.__isLoading);
+
+        if (isSkeletonRow) {
+          // 1. SCROLLABLE COLUMNS SKELETON
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(
+            geometry.totalFrozenWidth,
+            headerH,
+            Math.max(0, width - geometry.totalFrozenWidth),
+            Math.max(0, height - headerH)
+          );
+          ctx.clip();
+
+          for (let sc = startScrollColIdx; sc <= endScrollColIdx; sc++) {
+            const colIdx = geometry.frozenColumns.length + sc;
+            const col = geometry.columns[colIdx];
+            if (!col) continue;
+
+            const cellX = geometry.totalFrozenWidth + geometry.scrollableColOffsets[sc] - scrollLeft;
+            SkeletonPainter.paintSkeletonCell(ctx, cellX, rowY, col.width, rowH, theme);
+          }
+          ctx.restore();
+
+          // 2. FROZEN COLUMNS SKELETON
+          let curFrozenX = rowNumW;
+          for (let fc = 0; fc < geometry.frozenColumns.length; fc++) {
+            const col = geometry.frozenColumns[fc];
+            SkeletonPainter.paintSkeletonCell(ctx, curFrozenX, rowY, col.width, rowH, theme);
+            curFrozenX += col.width;
+          }
+
+          // 3. ROW NUMBER GUTTER SKELETON
+          ctx.fillStyle = theme.canvas.rowNumberBg;
+          ctx.fillRect(0, rowY, rowNumW, rowH);
+
+          ctx.fillStyle = '#FF9F0A';
+          ctx.fillRect(0, rowY, 3, rowH);
+
+          ctx.fillStyle = theme.canvas.rowNumberText;
+          ctx.font = '500 ' + (theme.fontSize - 1) + 'px ' + theme.fontFamily;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('⟳', rowNumW / 2, rowY + rowH / 2);
+
+          ctx.strokeStyle = theme.canvas.rowNumberBorder;
+          ctx.beginPath();
+          ctx.moveTo(rowNumW - 0.5, rowY);
+          ctx.lineTo(rowNumW - 0.5, rowY + rowH);
+          ctx.moveTo(0, rowY + rowH - 0.5);
+          ctx.lineTo(rowNumW, rowY + rowH - 0.5);
+          ctx.stroke();
+
           continue;
         }
 
