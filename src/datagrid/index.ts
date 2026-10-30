@@ -112,3 +112,11 @@ export { StreamingEngine } from './core/StreamingEngine';
 export type { CellFlash, CellFlashState, FlashType } from './core/StreamingEngine';
 export { ExportEngine } from './export/ExportEngine';
 export type { CsvExportOptions, ExcelExportOptions } from './export/ExportEngine';
+
+export type {
+  IServerSideGetRowsRequest,
+  IServerSideGetRowsParams,
+  IDatasource,
+  ServerSideStoreOptions,
+} from './types/ssrm';
+export { ServerSideRowStore } from './store/ServerSideRowStore';
