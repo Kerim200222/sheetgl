@@ -162,21 +162,36 @@ export function useGridGeometry({
   geometryRef.current.setColumnGroups(columnGroups, groupHeaderHeight);
   geometryRef.current.setColumns(effectiveColumns);
 
-  useEffect(() => {
-    const sc = scrollContainerRef.current;
-    if (sc) {
-      const totalW = geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
-      const maxLeft = Math.max(0, totalW - sc.clientWidth);
-      if (sc.scrollLeft > maxLeft) {
-        sc.scrollLeft = maxLeft;
+  const readSavedScroll = useCallback((key?: string): { left: number; top: number } => {
+    if (!key) return { left: 0, top: 0 };
+    try {
+      const raw = localStorage.getItem(`sheetgl_state_v1_${key}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          left: typeof parsed.scrollLeft === 'number' && parsed.scrollLeft >= 0 ? parsed.scrollLeft : 0,
+          top: typeof parsed.scrollTop === 'number' && parsed.scrollTop >= 0 ? parsed.scrollTop : 0,
+        };
       }
-      scrollPosRef.current = {
-        left: Math.min(sc.scrollLeft, maxLeft),
-        top: sc.scrollTop,
-      };
-    }
-    onRequestRender?.();
-  }, [effectiveColumns, rowHeight, headerHeight, columnGroups, groupHeaderHeight, onRequestRender]);
+    } catch {}
+    return { left: 0, top: 0 };
+  }, []);
+
+  const initialSavedScroll = useMemo(() => readSavedScroll(storageKey), [storageKey, readSavedScroll]);
+
+  const pendingScrollRestoreRef = useRef<{
+    key?: string;
+    left: number;
+    top: number;
+    restoredX: boolean;
+    restoredY: boolean;
+  }>({
+    key: storageKey,
+    left: initialSavedScroll.left,
+    top: initialSavedScroll.top,
+    restoredX: initialSavedScroll.left <= 0,
+    restoredY: initialSavedScroll.top <= 0,
+  });
 
   // 3. DOM Element Refs
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -184,7 +199,100 @@ export function useGridGeometry({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   // 4. Scroll Tracking & Indicators
-  const scrollPosRef = useRef<{ left: number; top: number }>({ left: 0, top: 0 });
+  const scrollPosRef = useRef<{ left: number; top: number }>({
+    left: initialSavedScroll.left,
+    top: initialSavedScroll.top,
+  });
+
+  if (pendingScrollRestoreRef.current.key !== storageKey) {
+    const nextSaved = readSavedScroll(storageKey);
+    pendingScrollRestoreRef.current = {
+      key: storageKey,
+      left: nextSaved.left,
+      top: nextSaved.top,
+      restoredX: nextSaved.left <= 0,
+      restoredY: nextSaved.top <= 0,
+    };
+    scrollPosRef.current = {
+      left: nextSaved.left,
+      top: nextSaved.top,
+    };
+  }
+
+  useEffect(() => {
+    const sc = scrollContainerRef.current;
+    const hasScrollableCols = geometryRef.current.totalScrollableWidth > 0 && effectiveColumns.length > 2;
+    const hasRows = rowCount > 0;
+    const pending = pendingScrollRestoreRef.current;
+
+    if (sc) {
+      const totalW = geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
+      const maxLeft = Math.max(0, totalW - sc.clientWidth);
+      const totalH = geometryRef.current.headerHeight + rowCount * geometryRef.current.rowHeight + 18;
+      const maxTop = Math.max(0, totalH - sc.clientHeight);
+
+      let nextLeft = sc.scrollLeft;
+      let nextTop = sc.scrollTop;
+
+      if (!pending.restoredX) {
+        if (hasScrollableCols) {
+          nextLeft = maxLeft > 0 ? Math.min(pending.left, maxLeft) : pending.left;
+          sc.scrollLeft = nextLeft;
+          if (sc.clientWidth > 0 && maxLeft >= 0) {
+            pending.restoredX = true;
+          }
+        } else {
+          nextLeft = pending.left;
+        }
+      } else {
+        if (hasScrollableCols && sc.scrollLeft > maxLeft) {
+          sc.scrollLeft = maxLeft;
+        }
+        nextLeft = hasScrollableCols ? Math.min(sc.scrollLeft, maxLeft) : scrollPosRef.current.left;
+      }
+
+      if (!pending.restoredY) {
+        if (hasRows) {
+          nextTop = maxTop > 0 ? Math.min(pending.top, maxTop) : pending.top;
+          sc.scrollTop = nextTop;
+          if (sc.clientHeight > 0 && maxTop >= 0) {
+            pending.restoredY = true;
+          }
+        } else {
+          nextTop = pending.top;
+        }
+      } else {
+        nextTop = hasRows ? sc.scrollTop : scrollPosRef.current.top;
+      }
+
+      scrollPosRef.current = {
+        left: nextLeft,
+        top: nextTop,
+      };
+
+      if (hasScrollableCols || hasRows) {
+        requestAnimationFrame(() => {
+          const domSc = scrollContainerRef.current;
+          if (!domSc) return;
+          const domTotalW = geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
+          const domMaxLeft = Math.max(0, domTotalW - domSc.clientWidth);
+          const domTotalH = geometryRef.current.headerHeight + rowCount * geometryRef.current.rowHeight + 18;
+          const domMaxTop = Math.max(0, domTotalH - domSc.clientHeight);
+
+          if (hasScrollableCols && Math.abs(domSc.scrollLeft - scrollPosRef.current.left) > 1) {
+            domSc.scrollLeft = Math.min(scrollPosRef.current.left, domMaxLeft);
+            scrollPosRef.current.left = domSc.scrollLeft;
+          }
+          if (hasRows && Math.abs(domSc.scrollTop - scrollPosRef.current.top) > 1) {
+            domSc.scrollTop = Math.min(scrollPosRef.current.top, domMaxTop);
+            scrollPosRef.current.top = domSc.scrollTop;
+          }
+          onRequestRender?.();
+        });
+      }
+    }
+    onRequestRender?.();
+  }, [effectiveColumns, rowCount, rowHeight, headerHeight, columnGroups, groupHeaderHeight, storageKey, onRequestRender]);
   const [scrollIndicator, setScrollIndicator] = useState<{ visible: boolean; row: number }>({
     visible: false,
     row: 1,
@@ -330,13 +438,27 @@ export function useGridGeometry({
   // 7. Scroll Handlers
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
+    const pending = pendingScrollRestoreRef.current;
+    const hasScrollableCols = geometryRef.current.totalScrollableWidth > 0 && effectiveColumns.length > 2;
+    const hasRows = rowCount > 0;
+
+    const effectiveLeft = !pending.restoredX && !hasScrollableCols ? pending.left : target.scrollLeft;
+    const effectiveTop = !pending.restoredY && !hasRows ? pending.top : target.scrollTop;
+
+    if (hasScrollableCols && target.scrollLeft !== pending.left) {
+      pending.restoredX = true;
+    }
+    if (hasRows && target.scrollTop !== pending.top) {
+      pending.restoredY = true;
+    }
+
     scrollPosRef.current = {
-      left: target.scrollLeft,
-      top: target.scrollTop,
+      left: effectiveLeft,
+      top: effectiveTop,
     };
     const topRow = Math.max(
       1,
-      Math.floor(target.scrollTop / geometryRef.current.rowHeight) + 1
+      Math.floor(effectiveTop / geometryRef.current.rowHeight) + 1
     );
     if (!scrollIndicatorStateRef.current.visible || scrollIndicatorStateRef.current.row !== topRow) {
       scrollIndicatorStateRef.current = { visible: true, row: topRow };
@@ -356,9 +478,11 @@ export function useGridGeometry({
     }, 900);
 
     onActiveOverlayClear?.();
-    onScrollChange?.(scrollPosRef.current);
+    if (hasScrollableCols || hasRows) {
+      onScrollChange?.(scrollPosRef.current);
+    }
     onRequestRender?.();
-  }, [onActiveOverlayClear, onScrollChange, onRequestRender]);
+  }, [effectiveColumns.length, rowCount, onActiveOverlayClear, onScrollChange, onRequestRender]);
 
   const ensureCellVisible = useCallback((row: number, col: number) => {
     const geom = geometryRef.current;
@@ -388,6 +512,18 @@ export function useGridGeometry({
     const sc = scrollContainerRef.current;
     const nextTop = options.top ?? sc?.scrollTop ?? scrollPosRef.current.top;
     const nextLeft = options.left ?? sc?.scrollLeft ?? scrollPosRef.current.left;
+    const hasScrollableCols = geometryRef.current.totalScrollableWidth > 0 && effectiveColumns.length > 2;
+    const hasRows = rowCount > 0;
+
+    if (options.left !== undefined) {
+      pendingScrollRestoreRef.current.left = nextLeft;
+      pendingScrollRestoreRef.current.restoredX = hasScrollableCols || nextLeft <= 0;
+    }
+    if (options.top !== undefined) {
+      pendingScrollRestoreRef.current.top = nextTop;
+      pendingScrollRestoreRef.current.restoredY = hasRows || nextTop <= 0;
+    }
+
     scrollPosRef.current = { top: nextTop, left: nextLeft };
     if (sc) {
       if (options.behavior === 'smooth') {
@@ -403,7 +539,7 @@ export function useGridGeometry({
     }
     onScrollChange?.(scrollPosRef.current);
     onRequestRender?.();
-  }, [onScrollChange, onRequestRender]);
+  }, [effectiveColumns.length, rowCount, onScrollChange, onRequestRender]);
 
   const scrollToTop = useCallback(() => {
     scrollTo({ top: 0, behavior: 'smooth' });

@@ -488,7 +488,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             parsed.scrollLeft = Math.round(pos.left);
             localStorage.setItem(`sheetgl_state_v1_${storageKey}`, JSON.stringify(parsed));
           } catch {}
-        }, 120);
+        }, 30);
       }
     },
   });
@@ -1847,10 +1847,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     const compiled = compileColumnFilters(next);
     await store.setFilter(compiled);
 
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-    }
-    scrollPosRef.current.top = 0;
+    scrollTo({ top: 0 });
 
     const maxR = Math.max(0, store.getRowCount() - 1);
     const activeCol = selectionRef.current.activeCell.col;
