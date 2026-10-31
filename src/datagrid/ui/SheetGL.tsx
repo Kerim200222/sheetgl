@@ -31,6 +31,7 @@ import { GeometryEngine } from '../core/GeometryEngine';
 import { SelectionModel } from '../core/SelectionModel';
 import { HistoryManager } from '../core/HistoryManager';
 import { ValidationEngine } from '../core/ValidationEngine';
+import { BLANK_FILTER_TOKEN, WITH_FILE_FILTER_TOKEN, WITHOUT_FILE_FILTER_TOKEN } from '../core/FilterEngine';
 import { CanvasRenderer } from '../renderer/CanvasRenderer';
 import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
 import { HeaderFilterPopover } from '../overlays/HeaderFilterPopover';
@@ -150,7 +151,15 @@ export function compileColumnFilters(
       if (st.semanticFilter) {
         singleFilters.push(st.semanticFilter);
       } else if (st.selectedValues) {
-        singleFilters.push([st.columnId, 'in', st.selectedValues]);
+        const hasWithFile = st.selectedValues.includes(WITH_FILE_FILTER_TOKEN);
+        const hasWithoutFile = st.selectedValues.includes(WITHOUT_FILE_FILTER_TOKEN);
+        if (hasWithFile && !hasWithoutFile && st.selectedValues.length === 1) {
+          singleFilters.push([st.columnId, '<>', BLANK_FILTER_TOKEN]);
+        } else if (hasWithoutFile && !hasWithFile && st.selectedValues.length === 1) {
+          singleFilters.push([st.columnId, '=', BLANK_FILTER_TOKEN]);
+        } else {
+          singleFilters.push([st.columnId, 'in', st.selectedValues]);
+        }
       }
     } else if (st.mode === 'condition' && st.operator) {
       if (st.operator === 'between') {
@@ -3969,6 +3978,36 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             onInsertRowBelow={() => handleInsertRow(contextMenu.row + 1)}
             onClearCells={handleClearSelectedCells}
             onDeleteRow={() => handleDeleteRow(contextMenu.row)}
+            activeAttachmentFilter={(() => {
+              if (!contextMenu.column) return 'all';
+              const cf = columnFilters[contextMenu.column.id];
+              if (!cf) return 'all';
+              if (cf.selectedValues?.includes(WITH_FILE_FILTER_TOKEN) && !cf.selectedValues?.includes(WITHOUT_FILE_FILTER_TOKEN)) return 'with_file';
+              if ((cf.selectedValues?.includes(WITHOUT_FILE_FILTER_TOKEN) || cf.selectedValues?.includes(BLANK_FILTER_TOKEN)) && !cf.selectedValues?.includes(WITH_FILE_FILTER_TOKEN)) return 'without_file';
+              if (cf.operator === '<>') return 'with_file';
+              if (cf.operator === '=') return 'without_file';
+              return 'all';
+            })()}
+            onFilterAttachment={(mode) => {
+              if (!contextMenu.column) return;
+              if (mode === 'all') {
+                handleApplyColumnFilter(contextMenu.column.id, null);
+              } else if (mode === 'with_file') {
+                handleApplyColumnFilter(contextMenu.column.id, {
+                  columnId: contextMenu.column.id,
+                  mode: 'values',
+                  selectedValues: [WITH_FILE_FILTER_TOKEN],
+                  semanticFilter: [contextMenu.column.id, '<>', BLANK_FILTER_TOKEN],
+                });
+              } else if (mode === 'without_file') {
+                handleApplyColumnFilter(contextMenu.column.id, {
+                  columnId: contextMenu.column.id,
+                  mode: 'values',
+                  selectedValues: [WITHOUT_FILE_FILTER_TOKEN],
+                  semanticFilter: [contextMenu.column.id, '=', BLANK_FILTER_TOKEN],
+                });
+              }
+            }}
             onFilterByCellValue={() => {
               if (contextMenu.column) {
                 const vRow = store.getViewRow(contextMenu.row);
@@ -3976,15 +4015,23 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
                   contextMenu.rowData || (vRow && vRow.type === 'data' ? vRow.data : null);
                 if (rowObj) {
                   const rawVal = rowObj[contextMenu.column.id];
-                  const filterVal =
-                    rawVal === null || rawVal === undefined || String(rawVal).trim() === ''
-                      ? '__SHEETGL_BLANK__'
-                      : String(rawVal);
-                  handleApplyColumnFilter(contextMenu.column.id, {
-                    columnId: contextMenu.column.id,
-                    mode: 'values',
-                    selectedValues: [filterVal],
-                  });
+                  const isBlank = rawVal === null || rawVal === undefined || String(rawVal).trim() === '';
+                  const isPdf = contextMenu.column.type === 'pdf' || contextMenu.column.type === 'file';
+                  if (isPdf) {
+                    handleApplyColumnFilter(contextMenu.column.id, {
+                      columnId: contextMenu.column.id,
+                      mode: 'values',
+                      selectedValues: [isBlank ? WITHOUT_FILE_FILTER_TOKEN : WITH_FILE_FILTER_TOKEN],
+                      semanticFilter: [contextMenu.column.id, isBlank ? '=' : '<>', BLANK_FILTER_TOKEN],
+                    });
+                  } else {
+                    const filterVal = isBlank ? '__SHEETGL_BLANK__' : String(rawVal);
+                    handleApplyColumnFilter(contextMenu.column.id, {
+                      columnId: contextMenu.column.id,
+                      mode: 'values',
+                      selectedValues: [filterVal],
+                    });
+                  }
                 }
               }
             }}

@@ -9,7 +9,7 @@ import {
   FilterDescriptor,
   FilterOperation,
 } from '../types/filter';
-import { BLANK_FILTER_TOKEN, FilterEngine } from '../core/FilterEngine';
+import { BLANK_FILTER_TOKEN, WITH_FILE_FILTER_TOKEN, WITHOUT_FILE_FILTER_TOKEN, FilterEngine } from '../core/FilterEngine';
 import { SortEngine } from '../core/SortEngine';
 import { MaterialIcon } from '../ui/MaterialIcon';
 
@@ -244,7 +244,15 @@ export function formatCellStructureValue(
   column: ColumnDef,
   locale: IGridLocale
 ): string {
+  if (rawVal === WITH_FILE_FILTER_TOKEN) {
+    return 'With File';
+  }
+  if (rawVal === WITHOUT_FILE_FILTER_TOKEN) {
+    return 'Without File';
+  }
   if (rawVal === BLANK_FILTER_TOKEN || rawVal === null || rawVal === undefined || rawVal === '') {
+    const ct = (column.type || '').toLowerCase();
+    if (ct === 'pdf' || ct === 'file') return 'Without File';
     return locale.emptyText;
   }
 
@@ -505,29 +513,64 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
           processedRes = unpackedItems;
         }
 
-        // Always guarantee that Blank is placed at the very top (index 0) of the distinct values list
-        const blanks: DistinctItem[] = [];
-        const nonBlanks: DistinctItem[] = [];
-        for (const it of processedRes) {
-          if (
-            it.value === BLANK_FILTER_TOKEN ||
-            it.value === '' ||
-            it.value === null ||
-            it.value === undefined ||
-            it.label === '(Blank)' ||
-            it.label === '(Boş)' ||
-            it.label === '(Boş / Blank)'
-          ) {
-            blanks.push({
-              ...it,
-              value: BLANK_FILTER_TOKEN,
-              label: locale.emptyText || '(Blank)',
-            });
-          } else {
-            nonBlanks.push(it);
+        const isPdfOrFileCol = colType === 'pdf' || colType === 'file';
+        if (isPdfOrFileCol) {
+          let withFileCnt = 0;
+          let withoutFileCnt = 0;
+          for (const it of processedRes) {
+            if (
+              it.value === BLANK_FILTER_TOKEN ||
+              it.value === WITHOUT_FILE_FILTER_TOKEN ||
+              it.value === '' ||
+              it.value === null ||
+              it.value === undefined ||
+              it.label === '(Blank)' ||
+              it.label === '(Boş)' ||
+              it.label === '(Boş / Blank)' ||
+              it.label === 'Without File'
+            ) {
+              withoutFileCnt += it.count ?? 0;
+            } else {
+              withFileCnt += it.count ?? 1;
+            }
           }
+          processedRes = [
+            {
+              value: WITH_FILE_FILTER_TOKEN,
+              label: 'With File',
+              count: withFileCnt,
+            },
+            {
+              value: WITHOUT_FILE_FILTER_TOKEN,
+              label: 'Without File',
+              count: withoutFileCnt,
+            },
+          ];
+        } else {
+          // Always guarantee that Blank is placed at the very top (index 0) of the distinct values list
+          const blanks: DistinctItem[] = [];
+          const nonBlanks: DistinctItem[] = [];
+          for (const it of processedRes) {
+            if (
+              it.value === BLANK_FILTER_TOKEN ||
+              it.value === '' ||
+              it.value === null ||
+              it.value === undefined ||
+              it.label === '(Blank)' ||
+              it.label === '(Boş)' ||
+              it.label === '(Boş / Blank)'
+            ) {
+              blanks.push({
+                ...it,
+                value: BLANK_FILTER_TOKEN,
+                label: locale.emptyText || '(Blank)',
+              });
+            } else {
+              nonBlanks.push(it);
+            }
+          }
+          processedRes = [...blanks, ...nonBlanks];
         }
-        processedRes = [...blanks, ...nonBlanks];
 
         setAllItems(processedRes);
 
@@ -910,6 +953,9 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
         });
       }
     }
+    if (colType === 'pdf' || colType === 'file') {
+      return result;
+    }
     // Always guarantee that Blank is placed at the very top (under Select All)
     const blanks: DistinctItem[] = [];
     const others: DistinctItem[] = [];
@@ -1153,9 +1199,19 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
       if (allItems.length > 0 && selectedSet.size === allItems.length && !search.trim()) {
         onApply(null);
       } else {
-        const semanticFilter = isDateCol
+        const isPdfOrFileCol = colType === 'pdf' || colType === 'file';
+        let semanticFilter: FilterDescriptor | undefined = isDateCol
           ? compileSemanticDateTreeFilter(column.id, dateHierarchy, selectedSet)
           : undefined;
+        if (isPdfOrFileCol) {
+          const hasWith = selectedSet.has(WITH_FILE_FILTER_TOKEN);
+          const hasWithout = selectedSet.has(WITHOUT_FILE_FILTER_TOKEN) || selectedSet.has(BLANK_FILTER_TOKEN);
+          if (hasWith && !hasWithout) {
+            semanticFilter = [column.id, '<>', BLANK_FILTER_TOKEN];
+          } else if (!hasWith && hasWithout) {
+            semanticFilter = [column.id, '=', BLANK_FILTER_TOKEN];
+          }
+        }
         onApply({
           columnId: column.id,
           mode: 'values',

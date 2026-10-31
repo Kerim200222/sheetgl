@@ -42,6 +42,8 @@ export interface ContextMenuOverlayProps {
   onChangeSummaryType: (summaryType: SummaryType) => void;
   onOpenSparklineModal?: () => void;
   onViewRowDetail?: () => void;
+  activeAttachmentFilter?: 'all' | 'with_file' | 'without_file';
+  onFilterAttachment?: (mode: 'all' | 'with_file' | 'without_file') => void;
   onClose: () => void;
 }
 
@@ -72,6 +74,8 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
   onChangeSummaryType,
   onOpenSparklineModal,
   onViewRowDetail,
+  activeAttachmentFilter = 'all',
+  onFilterAttachment,
   onClose,
 }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -263,6 +267,36 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
               </span>
             </div>
 
+            {(menu.column.type === 'pdf' || menu.column.type === 'file') && onFilterAttachment && (
+              <>
+                {renderItem(
+                  'description',
+                  'With File',
+                  undefined,
+                  () => onFilterAttachment(activeAttachmentFilter === 'with_file' ? 'all' : 'with_file'),
+                  false,
+                  false,
+                  activeAttachmentFilter === 'with_file' ? '✓' : undefined
+                )}
+                {renderItem(
+                  'insert_drive_file',
+                  'Without File',
+                  undefined,
+                  () => onFilterAttachment(activeAttachmentFilter === 'without_file' ? 'all' : 'without_file'),
+                  false,
+                  false,
+                  activeAttachmentFilter === 'without_file' ? '✓' : undefined
+                )}
+                {activeAttachmentFilter !== 'all' &&
+                  renderItem(
+                    'filter_alt_off',
+                    isTR ? 'Filtreyi Temizle (All)' : 'Clear Filter (All)',
+                    undefined,
+                    () => onFilterAttachment('all')
+                  )}
+                {divider}
+              </>
+            )}
             {renderItem(
               'north',
               isTR ? 'Artan Sırala (A → Z)' : 'Sort Ascending (A → Z)',

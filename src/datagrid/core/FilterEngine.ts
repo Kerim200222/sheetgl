@@ -1,6 +1,8 @@
 import { FilterDescriptor, FilterOperation, SingleFilter } from '../types/filter';
 
 export const BLANK_FILTER_TOKEN = '__SHEETGL_BLANK__';
+export const WITH_FILE_FILTER_TOKEN = '__SHEETGL_WITH_FILE__';
+export const WITHOUT_FILE_FILTER_TOKEN = '__SHEETGL_WITHOUT_FILE__';
 
 export interface ParsedDateInfo {
   year: number;
@@ -23,6 +25,7 @@ interface CompiledSetCache {
   isoMonthSet: Set<string>;
   isoYearSet: Set<number>;
   hasBlank: boolean;
+  hasWithFile: boolean;
 }
 
 export class FilterEngine {
@@ -79,10 +82,13 @@ export class FilterEngine {
       const isoMonthSet = new Set<string>();
       const isoYearSet = new Set<number>();
       let hasBlank = false;
+      let hasWithFile = false;
       for (let i = 0; i < targetVal.length; i++) {
         const t = targetVal[i];
-        if (t === BLANK_FILTER_TOKEN || t === '' || t === null || t === undefined) {
+        if (t === BLANK_FILTER_TOKEN || t === WITHOUT_FILE_FILTER_TOKEN || t === '' || t === null || t === undefined) {
           hasBlank = true;
+        } else if (t === WITH_FILE_FILTER_TOKEN) {
+          hasWithFile = true;
         } else {
           rawSet.add(t);
           const s = typeof t === 'string' ? t.trim() : String(t).trim();
@@ -108,7 +114,7 @@ export class FilterEngine {
           }
         }
       }
-      cached = { rawSet, lowerSet, isoDateSet, isoMonthSet, isoYearSet, hasBlank };
+      cached = { rawSet, lowerSet, isoDateSet, isoMonthSet, isoYearSet, hasBlank, hasWithFile };
       this.inSetCache.set(targetVal, cached);
     }
     return cached;
@@ -369,6 +375,7 @@ export class FilterEngine {
       if (!Array.isArray(targetVal) || targetVal.length === 0) return false;
       const compiled = this.getCompiledSet(targetVal);
       if (isRawBlank) return compiled.hasBlank;
+      if (compiled.hasWithFile) return true;
       if (Array.isArray(rawVal)) {
         for (let i = 0; i < rawVal.length; i++) {
           const elem = rawVal[i];
@@ -396,6 +403,7 @@ export class FilterEngine {
       if (!Array.isArray(targetVal) || targetVal.length === 0) return true;
       const compiled = this.getCompiledSet(targetVal);
       if (isRawBlank) return !compiled.hasBlank;
+      if (compiled.hasWithFile) return false;
       if (Array.isArray(rawVal)) {
         for (let i = 0; i < rawVal.length; i++) {
           const elem = rawVal[i];
@@ -419,7 +427,13 @@ export class FilterEngine {
       return !this.matchesCompiledDateSet(rawVal, compiled);
     }
 
-    if (op === '=' && (targetVal === null || targetVal === undefined || targetVal === '' || targetVal === BLANK_FILTER_TOKEN)) {
+    if (op === '=' && targetVal === WITH_FILE_FILTER_TOKEN) {
+      return !isRawBlank;
+    }
+    if (op === '<>' && targetVal === WITH_FILE_FILTER_TOKEN) {
+      return isRawBlank;
+    }
+    if (op === '=' && (targetVal === null || targetVal === undefined || targetVal === '' || targetVal === BLANK_FILTER_TOKEN || targetVal === WITHOUT_FILE_FILTER_TOKEN)) {
       return isRawBlank;
     }
 
