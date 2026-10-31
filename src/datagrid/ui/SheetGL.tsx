@@ -96,6 +96,10 @@ export interface SheetGLProps {
   ) => void;
   /** Callback fired when a column is interactively resized */
   onColumnResize?: (columnId: string, newWidth: number) => void;
+  /** Whether columns can be reordered by dragging their headers (default: true) */
+  allowColumnReordering?: boolean;
+  /** Callback fired when columns are reordered via header drag-and-drop */
+  onColumnOrderChange?: (columnIds: string[], reorderedColumns: ColumnDef[]) => void;
   /** Optional unique key per module/view to automatically persist & restore filter, sort, and scroll state in localStorage */
   storageKey?: string;
   /** Callback fired when viewport scroll position changes */
@@ -217,6 +221,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     remoteOperations,
     onFilterChange,
     onColumnResize,
+    allowColumnReordering = true,
+    onColumnOrderChange,
     storageKey,
     onScrollChange,
     onExport,
@@ -439,6 +445,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     updateColumnDef: handleUpdateColumnDef,
     setColumnWidth: handleSetColumnWidth,
     getColumnWidth: handleGetColumnWidth,
+    reorderColumn,
+    resetColumnOrder,
     resizingCol,
     setResizingCol,
     scrollPosRef,
@@ -461,9 +469,11 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     groupHeaderHeight,
     rowSelectionMode,
     rowCount: store.getRowCount(),
+    storageKey,
     onRequestRender: () => requestRenderRef.current(),
     onActiveOverlayClear: () => setActiveOverlay(null),
     onColumnResize,
+    onColumnOrderChange,
     onScrollChange: (pos) => {
       onScrollChange?.(pos);
       if (storageKey) {
@@ -546,6 +556,24 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     mode: 'corner' | 'right-duplicate';
     sourceRange: { minRow: number; maxRow: number; minCol: number; maxCol: number };
     targetRange: { minRow: number; maxRow: number; minCol: number; maxCol: number };
+  } | null>(null);
+
+  const [columnDragState, setColumnDragState] = useState<{
+    sourceColIndex: number;
+    sourceColId: string;
+    sourceColTitle: string;
+    isSourceFrozen: boolean;
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+    targetColIndex: number;
+    targetColId: string;
+    targetColTitle: string;
+    insertAfter: boolean;
+    dropIndicatorX: number;
+    isDragging: boolean;
+    shiftKey: boolean;
   } | null>(null);
 
   // Async Backend Cascading Row Loading Keys
@@ -769,6 +797,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             localStorage.removeItem(`sheetgl_state_v1_${storageKey}`);
           } catch {}
         }
+        resetColumnOrder();
         setSortRules(initialSort);
         store.setSorting(initialSort);
         setColumnFilters({});
@@ -2056,6 +2085,110 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   ]);
 
   // ============================================================================
+  // COLUMN HEADER DRAG-AND-DROP REORDERING EFFECT
+  // ============================================================================
+  useEffect(() => {
+    if (!columnDragState) return;
+
+    const handleColDragMove = (e: MouseEvent) => {
+      const surface = gridSurfaceRef.current;
+      if (!surface) return;
+      const rect = surface.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const deltaX = Math.abs(e.clientX - columnDragState.startX);
+      if (!columnDragState.isDragging && deltaX < 5) {
+        return;
+      }
+
+      if (allowColumnReordering === false || columnDragState.sourceColId === '__selection__') {
+        return;
+      }
+
+      checkEdgeAutoScroll(x, columnDragState.startY, rect);
+
+      const geom = geometryRef.current;
+      const sl = scrollPosRef.current.left;
+      const frozenCount = geom.frozenColumns.length;
+      const minIdx = columnDragState.isSourceFrozen
+        ? (geom.frozenColumns[0]?.id === '__selection__' ? 1 : 0)
+        : frozenCount;
+      const maxIdx = columnDragState.isSourceFrozen
+        ? Math.max(minIdx, frozenCount - 1)
+        : geom.columns.length - 1;
+
+      let bestColIdx = columnDragState.sourceColIndex;
+      let insertAfter = false;
+      let indicatorX = geom.getColumnScreenRect(bestColIdx, sl).x;
+
+      for (let c = minIdx; c <= maxIdx; c++) {
+        const colRect = geom.getColumnScreenRect(c, sl);
+        if (x >= colRect.x && x <= colRect.x + colRect.width) {
+          bestColIdx = c;
+          insertAfter = x > colRect.x + colRect.width / 2;
+          indicatorX = insertAfter ? colRect.x + colRect.width : colRect.x;
+          break;
+        } else if (c === minIdx && x < colRect.x) {
+          bestColIdx = c;
+          insertAfter = false;
+          indicatorX = colRect.x;
+          break;
+        } else if (c === maxIdx && x > colRect.x + colRect.width) {
+          bestColIdx = c;
+          insertAfter = true;
+          indicatorX = colRect.x + colRect.width;
+          break;
+        }
+      }
+
+      const targetCol = geom.columns[bestColIdx];
+      if (!targetCol) return;
+
+      setColumnDragState((prev) =>
+        prev
+          ? {
+              ...prev,
+              isDragging: true,
+              currentX: Math.max(8, Math.min(rect.width - 140, x)),
+              currentY: Math.max(4, Math.min(geom.headerHeight + 24, y)),
+              targetColIndex: bestColIdx,
+              targetColId: targetCol.id,
+              targetColTitle: targetCol.title || targetCol.id,
+              insertAfter,
+              dropIndicatorX: indicatorX,
+            }
+          : null
+      );
+    };
+
+    const handleColDragUp = () => {
+      const state = columnDragState;
+      setColumnDragState(null);
+      if (!state.isDragging) {
+        handleHeaderSort(state.sourceColIndex, state.shiftKey);
+        return;
+      }
+      if (state.sourceColId !== state.targetColId) {
+        reorderColumn(state.sourceColId, state.targetColId, state.insertAfter);
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? `⇄ "${state.sourceColTitle}" sütun sırası değiştirildi.`
+            : `⇄ Column "${state.sourceColTitle}" reordered.`,
+          'info'
+        );
+      }
+    };
+
+    window.addEventListener('mousemove', handleColDragMove);
+    window.addEventListener('mouseup', handleColDragUp);
+    return () => {
+      window.removeEventListener('mousemove', handleColDragMove);
+      window.removeEventListener('mouseup', handleColDragUp);
+    };
+  }, [columnDragState, allowColumnReordering, reorderColumn, checkEdgeAutoScroll, currentLocale, showToast]);
+
+  // ============================================================================
   // NAVIGATION & AUTO-SCROLL INTO VIEW
   // ============================================================================
   const moveSelection = (dRow: number, dCol: number, isRangeSelect: boolean = false) => {
@@ -2327,7 +2460,23 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             },
           });
         } else {
-          handleHeaderSort(headerHit.colIndex, e.shiftKey);
+          setColumnDragState({
+            sourceColIndex: headerHit.colIndex,
+            sourceColId: headerHit.column.id,
+            sourceColTitle: headerHit.column.title || headerHit.column.id,
+            isSourceFrozen: headerHit.colIndex < geom.frozenColumns.length,
+            startX: e.clientX,
+            startY: e.clientY,
+            currentX: x,
+            currentY: y,
+            targetColIndex: headerHit.colIndex,
+            targetColId: headerHit.column.id,
+            targetColTitle: headerHit.column.title || headerHit.column.id,
+            insertAfter: false,
+            dropIndicatorX: headerHit.headerX,
+            isDragging: false,
+            shiftKey: e.shiftKey,
+          });
         }
       }
       return;
@@ -3398,9 +3547,73 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           position: 'relative',
           flex: 1,
           overflow: activeOverlay || headerFilterState || contextMenu ? 'visible' : 'hidden',
-          cursor: resizingCol ? 'col-resize' : cursorStyle,
+          cursor: resizingCol ? 'col-resize' : columnDragState?.isDragging ? 'grabbing' : cursorStyle,
         }}
       >
+        {/* Column Drag-and-Drop Reorder Indicator & Floating Header Ghost */}
+        {columnDragState?.isDragging && (
+          <>
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                left: columnDragState.dropIndicatorX - 1.5,
+                width: 3,
+                background: resolvedTheme.dom.accentColor || '#2563eb',
+                boxShadow: '0 0 10px rgba(37, 99, 235, 0.75)',
+                zIndex: 95,
+                pointerEvents: 'none',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: -4.5,
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  background: resolvedTheme.dom.accentColor || '#2563eb',
+                  border: '2px solid #ffffff',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                }}
+              />
+            </div>
+            <div
+              style={{
+                position: 'absolute',
+                left: columnDragState.currentX + 12,
+                top: Math.max(6, columnDragState.currentY - 14),
+                zIndex: 96,
+                padding: '5px 11px',
+                borderRadius: 8,
+                background: resolvedTheme.dom.popoverBg,
+                color: resolvedTheme.dom.popoverText,
+                border: `1.5px solid ${resolvedTheme.dom.accentColor || '#2563eb'}`,
+                boxShadow: '0 10px 25px rgba(0,0,0,0.28)',
+                fontSize: 12,
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                pointerEvents: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span style={{ color: resolvedTheme.dom.accentColor || '#2563eb', fontWeight: 900 }}>⇄</span>
+              <span>{columnDragState.sourceColTitle}</span>
+              {columnDragState.targetColId !== columnDragState.sourceColId && (
+                <span style={{ opacity: 0.75, fontSize: 11, fontWeight: 600 }}>
+                  {columnDragState.insertAfter
+                    ? `→ ${columnDragState.targetColTitle}`
+                    : `← ${columnDragState.targetColTitle}`}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+
         {/* Physical 2D Canvas */}
         <canvas
           ref={canvasRef}

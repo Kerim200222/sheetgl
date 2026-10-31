@@ -10,9 +10,11 @@ export interface UseGridGeometryOptions {
   groupHeaderHeight?: number;
   rowSelectionMode?: RowSelectionMode;
   rowCount?: number;
+  storageKey?: string;
   onRequestRender?: () => void;
   onActiveOverlayClear?: () => void;
   onColumnResize?: (colId: string, newWidth: number) => void;
+  onColumnOrderChange?: (columnIds: string[], reorderedColumns: ColumnDef[]) => void;
   onScrollChange?: (pos: { top: number; left: number }) => void;
 }
 
@@ -37,6 +39,8 @@ export interface UseGridGeometryReturn {
   updateColumnDef: (colId: string, patch: Partial<ColumnDef>) => void;
   setColumnWidth: (colId: string, width: number) => void;
   getColumnWidth: (colId: string) => number | undefined;
+  reorderColumn: (sourceColId: string, targetColId: string, insertAfter: boolean) => void;
+  resetColumnOrder: () => void;
 
   // Resizing state
   resizingCol: ColumnResizeState | null;
@@ -69,11 +73,36 @@ export function useGridGeometry({
   groupHeaderHeight = 30,
   rowSelectionMode = 'none',
   rowCount = 0,
+  storageKey,
   onRequestRender,
   onActiveOverlayClear,
   onColumnResize,
+  onColumnOrderChange,
   onScrollChange,
 }: UseGridGeometryOptions): UseGridGeometryReturn {
+  const readSavedColumnOrder = useCallback((key?: string): string[] | null => {
+    if (!key) return null;
+    try {
+      const raw = localStorage.getItem(`sheetgl_state_v1_${key}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed.columnOrder) && parsed.columnOrder.length > 0) {
+          return parsed.columnOrder;
+        }
+      }
+    } catch {}
+    return null;
+  }, []);
+
+  const [customColumnOrder, setCustomColumnOrder] = useState<string[] | null>(() =>
+    readSavedColumnOrder(storageKey)
+  );
+  const [prevStorageKey, setPrevStorageKey] = useState<string | undefined>(storageKey);
+
+  if (prevStorageKey !== storageKey) {
+    setPrevStorageKey(storageKey);
+    setCustomColumnOrder(readSavedColumnOrder(storageKey));
+  }
 
   // 1. Column state synced with props synchronously during render
   const [columns, setColumns] = useState<ColumnDef[]>(userColumns);
@@ -84,9 +113,27 @@ export function useGridGeometry({
     setColumns(userColumns);
   }
 
-  // Derived effective columns with checkbox selection column when selectionMode is active
+  // Derived effective columns with custom drag-and-drop ordering and checkbox selection column
   const effectiveColumns = useMemo<ColumnDef[]>(() => {
-    const activeCols = prevUserColumns !== userColumns ? userColumns : columns;
+    const baseCols = prevUserColumns !== userColumns ? userColumns : columns;
+    let activeCols = baseCols;
+
+    if (customColumnOrder && customColumnOrder.length > 0) {
+      const orderMap = new Map<string, number>();
+      customColumnOrder.forEach((id, idx) => orderMap.set(id, idx));
+      const origIndexMap = new Map<string, number>();
+      baseCols.forEach((c, idx) => origIndexMap.set(c.id, idx));
+
+      activeCols = [...baseCols].sort((a, b) => {
+        const idxA = orderMap.get(a.id);
+        const idxB = orderMap.get(b.id);
+        if (idxA !== undefined && idxB !== undefined) return idxA - idxB;
+        if (idxA !== undefined) return -1;
+        if (idxB !== undefined) return 1;
+        return (origIndexMap.get(a.id) ?? 0) - (origIndexMap.get(b.id) ?? 0);
+      });
+    }
+
     if (rowSelectionMode === 'single' || rowSelectionMode === 'multiple') {
       const selCol: ColumnDef = {
         id: '__selection__',
@@ -102,7 +149,7 @@ export function useGridGeometry({
       return [selCol, ...activeCols.filter((c) => c.id !== '__selection__')];
     }
     return activeCols;
-  }, [columns, userColumns, prevUserColumns, rowSelectionMode]);
+  }, [columns, userColumns, prevUserColumns, customColumnOrder, rowSelectionMode]);
 
   // 2. Geometry Engine reference
   const geometryRef = useRef<GeometryEngine>(
@@ -179,7 +226,6 @@ export function useGridGeometry({
     };
   }, [resizingCol, onColumnResize]);
 
-
   // ResizeObserver on containers
   useEffect(() => {
     const handleResize = () => onRequestRender?.();
@@ -213,6 +259,74 @@ export function useGridGeometry({
     return geometryRef.current.columns.find((c) => c.id === colId)?.width;
   }, []);
 
+  const reorderColumn = useCallback(
+    (sourceColId: string, targetColId: string, insertAfter: boolean) => {
+      if (!sourceColId || !targetColId || sourceColId === targetColId) return;
+      if (sourceColId === '__selection__' || targetColId === '__selection__') return;
+
+      const currentVisCols = geometryRef.current.columns.filter((c) => c.id !== '__selection__');
+      const sourceCol = currentVisCols.find((c) => c.id === sourceColId);
+      const targetCol = currentVisCols.find((c) => c.id === targetColId);
+      if (!sourceCol || !targetCol) return;
+
+      const currentVisIds = currentVisCols.map((c) => c.id);
+      const baseIds =
+        customColumnOrder && customColumnOrder.length > 0
+          ? Array.from(new Set([...customColumnOrder, ...currentVisIds]))
+          : [...currentVisIds];
+
+      const filteredIds = baseIds.filter((id) => id !== sourceColId);
+      const targetIdx = filteredIds.indexOf(targetColId);
+      if (targetIdx === -1) return;
+
+      const insertIdx = insertAfter ? targetIdx + 1 : targetIdx;
+      filteredIds.splice(insertIdx, 0, sourceColId);
+
+      setCustomColumnOrder(filteredIds);
+
+      if (storageKey) {
+        try {
+          const raw = localStorage.getItem(`sheetgl_state_v1_${storageKey}`);
+          const parsed = raw ? JSON.parse(raw) : {};
+          parsed.columnOrder = filteredIds;
+          localStorage.setItem(`sheetgl_state_v1_${storageKey}`, JSON.stringify(parsed));
+        } catch {}
+      }
+
+      if (
+        (sourceCol.headerGroup !== targetCol.headerGroup || sourceCol.groupId !== targetCol.groupId) &&
+        (targetCol.headerGroup || targetCol.groupId)
+      ) {
+        setColumns((prev) =>
+          prev.map((c) =>
+            c.id === sourceColId
+              ? {
+                  ...c,
+                  headerGroup: targetCol.headerGroup,
+                  groupId: targetCol.groupId,
+                }
+              : c
+          )
+        );
+      }
+
+      const orderMap = new Map<string, number>();
+      filteredIds.forEach((id, idx) => orderMap.set(id, idx));
+      const reorderedCols = [...currentVisCols].sort(
+        (a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0)
+      );
+      onColumnOrderChange?.(filteredIds, reorderedCols);
+      onRequestRender?.();
+    },
+    [customColumnOrder, storageKey, onColumnOrderChange, onRequestRender]
+  );
+
+  const resetColumnOrder = useCallback(() => {
+    setCustomColumnOrder(null);
+    setColumns(userColumns);
+    onRequestRender?.();
+  }, [userColumns, onRequestRender]);
+
   // 7. Scroll Handlers
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
@@ -244,137 +358,139 @@ export function useGridGeometry({
     onActiveOverlayClear?.();
     onScrollChange?.(scrollPosRef.current);
     onRequestRender?.();
-}, [onActiveOverlayClear, onScrollChange, onRequestRender]);
+  }, [onActiveOverlayClear, onScrollChange, onRequestRender]);
 
-const ensureCellVisible = useCallback((row: number, col: number) => {
-  const geom = geometryRef.current;
-  const sc = scrollContainerRef.current;
-  if (!sc) return;
+  const ensureCellVisible = useCallback((row: number, col: number) => {
+    const geom = geometryRef.current;
+    const sc = scrollContainerRef.current;
+    if (!sc) return;
 
-  const cellTop = geom.headerHeight + row * geom.rowHeight;
-  const cellBottom = cellTop + geom.rowHeight;
+    const cellTop = geom.headerHeight + row * geom.rowHeight;
+    const cellBottom = cellTop + geom.rowHeight;
 
-  if (cellTop < sc.scrollTop + geom.headerHeight) {
-    sc.scrollTop = cellTop - geom.headerHeight;
-  } else if (cellBottom > sc.scrollTop + sc.clientHeight) {
-    sc.scrollTop = cellBottom - sc.clientHeight;
-  }
-
-  const colRect = geom.getColumnScreenRect(col, sc.scrollLeft);
-  if (!colRect.isFrozen) {
-    if (colRect.x < geom.totalFrozenWidth) {
-      sc.scrollLeft -= geom.totalFrozenWidth - colRect.x;
-    } else if (colRect.x + colRect.width > sc.clientWidth) {
-      sc.scrollLeft += colRect.x + colRect.width - sc.clientWidth;
+    if (cellTop < sc.scrollTop + geom.headerHeight) {
+      sc.scrollTop = cellTop - geom.headerHeight;
+    } else if (cellBottom > sc.scrollTop + sc.clientHeight) {
+      sc.scrollTop = cellBottom - sc.clientHeight;
     }
-  }
-}, []);
 
-const scrollTo = useCallback((options: { top?: number; left?: number; behavior?: ScrollBehavior }) => {
-  const sc = scrollContainerRef.current;
-const nextTop = options.top ?? sc?.scrollTop ?? scrollPosRef.current.top;
-const nextLeft = options.left ?? sc?.scrollLeft ?? scrollPosRef.current.left;
-scrollPosRef.current = { top: nextTop, left: nextLeft };
-if (sc) {
-  if (options.behavior === 'smooth') {
-    sc.scrollTo({
-      top: nextTop,
-      left: nextLeft,
-      behavior: 'smooth',
-    });
-  } else {
-    sc.scrollTop = nextTop;
-    sc.scrollLeft = nextLeft;
-  }
-}
-onScrollChange?.(scrollPosRef.current);
-onRequestRender?.();
+    const colRect = geom.getColumnScreenRect(col, sc.scrollLeft);
+    if (!colRect.isFrozen) {
+      if (colRect.x < geom.totalFrozenWidth) {
+        sc.scrollLeft -= geom.totalFrozenWidth - colRect.x;
+      } else if (colRect.x + colRect.width > sc.clientWidth) {
+        sc.scrollLeft += colRect.x + colRect.width - sc.clientWidth;
+      }
+    }
+  }, []);
+
+  const scrollTo = useCallback((options: { top?: number; left?: number; behavior?: ScrollBehavior }) => {
+    const sc = scrollContainerRef.current;
+    const nextTop = options.top ?? sc?.scrollTop ?? scrollPosRef.current.top;
+    const nextLeft = options.left ?? sc?.scrollLeft ?? scrollPosRef.current.left;
+    scrollPosRef.current = { top: nextTop, left: nextLeft };
+    if (sc) {
+      if (options.behavior === 'smooth') {
+        sc.scrollTo({
+          top: nextTop,
+          left: nextLeft,
+          behavior: 'smooth',
+        });
+      } else {
+        sc.scrollTop = nextTop;
+        sc.scrollLeft = nextLeft;
+      }
+    }
+    onScrollChange?.(scrollPosRef.current);
+    onRequestRender?.();
   }, [onScrollChange, onRequestRender]);
 
-const scrollToTop = useCallback(() => {
-  scrollTo({ top: 0, behavior: 'smooth' });
-}, [scrollTo]);
+  const scrollToTop = useCallback(() => {
+    scrollTo({ top: 0, behavior: 'smooth' });
+  }, [scrollTo]);
 
-const scrollToBottom = useCallback(() => {
-  const sc = scrollContainerRef.current;
-  if (sc) {
-    scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
-  }
-}, [scrollTo]);
+  const scrollToBottom = useCallback(() => {
+    const sc = scrollContainerRef.current;
+    if (sc) {
+      scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+    }
+  }, [scrollTo]);
 
-// 8. Viewport & Drag Edge Scrolling
-const getViewportCoords = useCallback((e: React.MouseEvent): { x: number; y: number; onScrollbar: boolean } => {
-  const surface = gridSurfaceRef.current;
-  const sc = scrollContainerRef.current;
-  if (!surface) return { x: 0, y: 0, onScrollbar: false };
+  // 8. Viewport & Drag Edge Scrolling
+  const getViewportCoords = useCallback((e: React.MouseEvent): { x: number; y: number; onScrollbar: boolean } => {
+    const surface = gridSurfaceRef.current;
+    const sc = scrollContainerRef.current;
+    if (!surface) return { x: 0, y: 0, onScrollbar: false };
 
-  const rect = surface.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+    const rect = surface.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
-  const onScrollbar = Boolean(
-    sc && (x >= sc.clientWidth || y >= sc.clientHeight)
-  );
-  return { x, y, onScrollbar };
-}, []);
+    const onScrollbar = Boolean(
+      sc && (x >= sc.clientWidth || y >= sc.clientHeight)
+    );
+    return { x, y, onScrollbar };
+  }, []);
 
-const checkEdgeAutoScroll = useCallback((x: number, y: number, rect: DOMRect) => {
-  const sc = scrollContainerRef.current;
-  if (!sc) return;
+  const checkEdgeAutoScroll = useCallback((x: number, y: number, rect: DOMRect) => {
+    const sc = scrollContainerRef.current;
+    if (!sc) return;
 
-  const edgeThreshold = 36;
-  if (y > rect.height - edgeThreshold) {
-    sc.scrollTop += 18;
-  } else if (
-    y < geometryRef.current.headerHeight + edgeThreshold &&
-    y > geometryRef.current.headerHeight
-  ) {
-    sc.scrollTop = Math.max(0, sc.scrollTop - 18);
-  }
+    const edgeThreshold = 36;
+    if (y > rect.height - edgeThreshold) {
+      sc.scrollTop += 18;
+    } else if (
+      y < geometryRef.current.headerHeight + edgeThreshold &&
+      y > geometryRef.current.headerHeight
+    ) {
+      sc.scrollTop = Math.max(0, sc.scrollTop - 18);
+    }
 
-  if (x > rect.width - edgeThreshold) {
-    sc.scrollLeft += 24;
-  } else if (
-    x < geometryRef.current.totalFrozenWidth + edgeThreshold &&
-    x > geometryRef.current.totalFrozenWidth
-  ) {
-    sc.scrollLeft = Math.max(0, sc.scrollLeft - 24);
-  }
-}, []);
+    if (x > rect.width - edgeThreshold) {
+      sc.scrollLeft += 24;
+    } else if (
+      x < geometryRef.current.totalFrozenWidth + edgeThreshold &&
+      x > geometryRef.current.totalFrozenWidth
+    ) {
+      sc.scrollLeft = Math.max(0, sc.scrollLeft - 24);
+    }
+  }, []);
 
-// 9. Dimension Queries
-const getTotalWidth = useCallback((): number => {
-  return geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
-}, []);
+  // 9. Dimension Queries
+  const getTotalWidth = useCallback((): number => {
+    return geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
+  }, []);
 
-const getTotalHeight = useCallback((count: number): number => {
-  return geometryRef.current.headerHeight + count * geometryRef.current.rowHeight;
-}, []);
+  const getTotalHeight = useCallback((count: number): number => {
+    return geometryRef.current.headerHeight + count * geometryRef.current.rowHeight;
+  }, []);
 
-return {
-  containerRef,
-  gridSurfaceRef,
-  scrollContainerRef,
-  geometryRef,
-  columns,
-  effectiveColumns,
-  setColumns,
-  updateColumnDef,
-  setColumnWidth,
-  getColumnWidth,
-  resizingCol,
-  setResizingCol,
-  scrollPosRef,
-  scrollIndicator,
-  setScrollIndicator,
-  handleScroll,
-  ensureCellVisible,
-  scrollTo,
-  scrollToTop,
-  scrollToBottom,
-  getViewportCoords,
-  checkEdgeAutoScroll,
-  getTotalWidth,
-  getTotalHeight,
-};
+  return {
+    containerRef,
+    gridSurfaceRef,
+    scrollContainerRef,
+    geometryRef,
+    columns,
+    effectiveColumns,
+    setColumns,
+    updateColumnDef,
+    setColumnWidth,
+    getColumnWidth,
+    reorderColumn,
+    resetColumnOrder,
+    resizingCol,
+    setResizingCol,
+    scrollPosRef,
+    scrollIndicator,
+    setScrollIndicator,
+    handleScroll,
+    ensureCellVisible,
+    scrollTo,
+    scrollToTop,
+    scrollToBottom,
+    getViewportCoords,
+    checkEdgeAutoScroll,
+    getTotalWidth,
+    getTotalHeight,
+  };
 }
