@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ColumnCategory, DocsPortalProps, DocSubItem, getDocThemeColors } from './docs/types';
 import { buildDocSections } from './docs/sectionRegistry';
 import { DocsHeader } from './docs/components/DocsHeader';

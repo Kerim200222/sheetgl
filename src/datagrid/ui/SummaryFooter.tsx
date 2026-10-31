@@ -372,7 +372,6 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
   const isTR = locale.code.startsWith('tr');
 
   const isVisible = summaryConfig?.visible !== false;
-  if (!isVisible) return null;
 
   const showTotalCount = summaryConfig?.showTotalCount !== false;
   const showSelectionStats = summaryConfig?.showSelectionStats !== false;
@@ -477,6 +476,8 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
   const hasSelectionStats = Boolean(
     showSelectionStats && selectionStats && selectionStats.count > 1
   );
+
+  if (!isVisible) return null;
 
   return (
     <div
