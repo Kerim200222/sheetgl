@@ -83,5 +83,18 @@ describe('SortEngine', () => {
         'Sales-3000',
       ]);
     });
+
+    it('should keep null and undefined values at the bottom in descending sort', () => {
+      const items = [
+        { id: 1, val: 50 },
+        { id: 2, val: null },
+        { id: 3, val: 100 },
+        { id: 4, val: undefined },
+        { id: 5, val: 20 },
+      ];
+      const descCmp = SortEngine.createComparator([{ selector: 'val', desc: true }]);
+      const sorted = [...items].sort(descCmp);
+      expect(sorted.map((x) => x.val)).toEqual([100, 50, 20, null, undefined]);
+    });
   });
 });

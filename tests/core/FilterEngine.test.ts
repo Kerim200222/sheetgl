@@ -100,6 +100,22 @@ describe('FilterEngine', () => {
       expect(FilterEngine.match(false, '=', 'false')).toBe(true);
       expect(FilterEngine.match(false, '=', 'evet')).toBe(false);
     });
+
+    it('should evaluate semantic date matching across ISO, ISO-timestamp, and localized formats', () => {
+      // ISO date equality with timestamp
+      expect(FilterEngine.match('2026-10-30T14:30:00Z', '=', '2026-10-30')).toBe(true);
+      expect(FilterEngine.match('2026-10-30', '=', '2026-10-30T00:00:00Z')).toBe(true);
+
+      // European/Turkish dot-delimited date vs ISO date
+      expect(FilterEngine.match('30.10.2026', '=', '2026-10-30')).toBe(true);
+      expect(FilterEngine.match('2026-10-30', '=', '30.10.2026')).toBe(true);
+
+      // Date comparison operators
+      expect(FilterEngine.match('2026-10-30', '>', '2026-10-01')).toBe(true);
+      expect(FilterEngine.match('2026-05-15', '<', '2026-10-30')).toBe(true);
+      expect(FilterEngine.match('2026-10-30', 'between', ['2026-10-01', '2026-10-31'])).toBe(true);
+      expect(FilterEngine.match('2026-11-01', 'between', ['2026-10-01', '2026-10-31'])).toBe(false);
+    });
   });
 
   describe('evaluateRow (Compound and Nested Filter Descriptors)', () => {

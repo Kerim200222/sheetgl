@@ -141,12 +141,16 @@ describe('LocalDataStore', () => {
       expect(changes.deleted?.[0]).toBe(2);
     });
 
-    it('should duplicate row accurately', async () => {
+    it('should duplicate row accurately and track pending insertion in batch mode', async () => {
       const dup = await store.duplicateRow(1);
       expect(dup).not.toBeNull();
       expect(dup?.name).toBe('Product A');
       expect(dup?.id).not.toBe(1); // new unique id generated
       expect(store.getRowCount()).toBe(4);
+
+      expect(store.hasPendingChanges()).toBe(true);
+      const changes = store.getPendingChanges();
+      expect(changes.inserted?.some((r) => r.id === dup?.id)).toBe(true);
     });
   });
 });
