@@ -1652,13 +1652,16 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   // ============================================================================
   // CELL DUPLICATION HELPERS (FILL DOWN, FILL RIGHT & DRAG AUTOFILL)
   // ============================================================================
-  const handleDuplicateCellDown = useCallback(() => {
+  const handleDuplicateCellDown = useCallback(async () => {
     const norm = selectionRef.current.getNormalizedRange();
     const geom = geometryRef.current;
     const keyField = (store as any).getKeyField?.() || 'id';
     const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
 
     if (norm.maxRow > norm.minRow) {
+      if (typeof (store as any).ensureRangeLoadedImmediate === 'function') {
+        await (store as any).ensureRangeLoadedImmediate(norm.minRow, norm.maxRow);
+      }
       // Excel Ctrl+D when multiple rows selected: copy top row of selection down into all selected rows
       const topRow = store.getViewRow(norm.minRow);
       if (!topRow || topRow.type !== 'data') return;
@@ -1702,12 +1705,15 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     applyBatchCellUpdates(updates, 'Duplicate Cell Down');
   }, [store, applyBatchCellUpdates]);
 
-  const handleDuplicateCellRight = useCallback(() => {
+  const handleDuplicateCellRight = useCallback(async () => {
     const norm = selectionRef.current.getNormalizedRange();
     const geom = geometryRef.current;
     const keyField = (store as any).getKeyField?.() || 'id';
     const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
 
+    if (typeof (store as any).ensureRangeLoadedImmediate === 'function') {
+      await (store as any).ensureRangeLoadedImmediate(norm.minRow, norm.maxRow);
+    }
     if (norm.maxCol > norm.minCol) {
       // Excel Ctrl+R when multiple columns selected: copy leftmost column into selected columns on right
       for (let r = norm.minRow; r <= norm.maxRow; r++) {
@@ -2003,6 +2009,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         }
 
         if (!isSameRange) {
+          if (typeof (store as any).ensureRangeLoadedImmediate === 'function') {
+            await (store as any).ensureRangeLoadedImmediate(Math.min(sourceRange.minRow, targetRange.minRow), Math.max(sourceRange.maxRow, targetRange.maxRow));
+          }
           const geom = geometryRef.current;
           const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
           const srcHeight = sourceRange.maxRow - sourceRange.minRow + 1;
@@ -2921,8 +2930,11 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   // ============================================================================
   // CLEAR SELECTED CELLS
   // ============================================================================
-  const handleClearSelectedCells = useCallback(() => {
+  const handleClearSelectedCells = useCallback(async () => {
     const norm = selectionRef.current.getNormalizedRange();
+    if (typeof (store as any).ensureRangeLoadedImmediate === 'function') {
+      await (store as any).ensureRangeLoadedImmediate(norm.minRow, norm.maxRow);
+    }
     const geom = geometryRef.current;
     const keyField = (store as any).getKeyField?.() || 'id';
     const updates: Array<{ rowIndex: number; rowKey: any; colDef: ColumnDef; newValue: any }> = [];
@@ -2980,7 +2992,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   }, [store]);
 
   const applyPastedTsv = useCallback(
-    (text: string) => {
+    async (text: string) => {
       if (!text) return;
       if (
         permissions.mode === 'read' ||
@@ -3011,6 +3023,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       const isSingleClipboardValue = lines.length === 1 && !lines[0].includes('\t');
       const hasMultiSelection = norm.maxRow > norm.minRow || norm.maxCol > norm.minCol;
 
+      const pasteMaxRow = (isSingleClipboardValue && hasMultiSelection) ? norm.maxRow : Math.min(store.getRowCount() - 1, norm.minRow + lines.length - 1);
+      if (typeof (store as any).ensureRangeLoadedImmediate === 'function') {
+        await (store as any).ensureRangeLoadedImmediate(norm.minRow, pasteMaxRow);
+      }
       if (isSingleClipboardValue && hasMultiSelection) {
         const rawCellText = lines[0];
         for (let r = norm.minRow; r <= norm.maxRow; r++) {
