@@ -32,6 +32,7 @@ import { StreamingEngine } from '../core/StreamingEngine';
 import { SelectionModel } from '../core/SelectionModel';
 import { HistoryManager } from '../core/HistoryManager';
 import { ValidationEngine } from '../core/ValidationEngine';
+import { ExportEngine } from '../export/ExportEngine';
 import { BLANK_FILTER_TOKEN, WITH_FILE_FILTER_TOKEN, WITHOUT_FILE_FILTER_TOKEN } from '../core/FilterEngine';
 import { CanvasRenderer } from '../renderer/CanvasRenderer';
 import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
@@ -789,6 +790,23 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   requestRenderRef.current = requestRender;
   const openEditorRef = useRef<(row: number, col: number, initialChar?: string) => void>(() => {});
 
+  // ============================================================================
+  // CSV & EXCEL EXPORT ENGINE
+  // ============================================================================
+  const exportCsv = useCallback((filename?: string) => {
+    if (permissions.allowExport === false) return;
+    if (onExport) {
+      onExport();
+      return;
+    }
+    ExportEngine.exportAsCsv(geometryRef.current.columns, store, filename);
+  }, [permissions.allowExport, onExport, store]);
+
+  const exportExcel = useCallback((filename?: string) => {
+    if (permissions.allowExport === false) return;
+    ExportEngine.exportAsExcel(geometryRef.current.columns, store, filename);
+  }, [permissions.allowExport, store]);
+
   // 6b. Expose Imperative GridApi
   const gridApi = useMemo<GridApi>(
     (): GridApi => ({
@@ -847,6 +865,12 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         requestRender();
       },
       getStreamingEngine: () => streamingEngineRef.current,
+      exportDataAsCsv: (filename?: string) => {
+        exportCsv(filename);
+      },
+      exportDataAsExcel: (filename?: string) => {
+        exportExcel(filename);
+      },
     }),
     [
       requestRender,
@@ -863,6 +887,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       handleGetColumnWidth,
       getTotalWidth,
       getTotalHeight,
+      exportCsv,
+      exportExcel,
     ]
   );
 
@@ -3379,35 +3405,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     }
   };
 
-  // ============================================================================
-  // CSV EXPORT
-  // ============================================================================
-  const exportCsv = () => {
-    if (permissions.allowExport === false) return;
-    const cols = geometryRef.current.columns;
-    const headerRow = cols.map((c) => `"${c.title.replace(/"/g, '""')}"`).join(',');
-    const rows: string[] = [headerRow];
 
-    for (let r = 0; r < store.getRowCount(); r++) {
-      const vRow = store.getViewRow(r);
-      if (!vRow || vRow.type === 'group') continue;
-
-      const cellVals = cols.map((c) => {
-        const val = vRow.data[c.id];
-        return `"${String(val ?? '').replace(/"/g, '""')}"`;
-      });
-      rows.push(cellVals.join(','));
-    }
-
-    const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `sheetgl_export_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   // ============================================================================
   // LIVE SELECTION AGGREGATIONS (EXCEL STATUS BAR STATS)
@@ -3541,6 +3539,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           requestRender();
         }}
         onExportCsv={onExport || exportCsv}
+        onExportExcel={exportExcel}
         groups={groups.map((g) => g.selector)}
         onToggleGroupColumn={handleToggleGroupColumn}
         onExpandAllGroups={() => {
@@ -4187,6 +4186,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
                 });
               }
             }}
+            onExportExcel={exportExcel}
+            onExportCsv={exportCsv}
             onViewRowDetail={
               onViewRowDetail
                 ? () => {

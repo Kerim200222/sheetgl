@@ -44,6 +44,8 @@ export interface ContextMenuOverlayProps {
   onViewRowDetail?: () => void;
   activeAttachmentFilter?: 'all' | 'with_file' | 'without_file';
   onFilterAttachment?: (mode: 'all' | 'with_file' | 'without_file') => void;
+  onExportExcel?: () => void;
+  onExportCsv?: () => void;
   onClose: () => void;
 }
 
@@ -76,6 +78,8 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
   onViewRowDetail,
   activeAttachmentFilter = 'all',
   onFilterAttachment,
+  onExportExcel,
+  onExportCsv,
   onClose,
 }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -565,6 +569,26 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
             onDeleteRow,
             !canDelete,
             true
+          )}
+
+          {permissions?.allowExport !== false && (onExportExcel || onExportCsv) && (
+            <>
+              {divider}
+              {onExportExcel &&
+                renderItem(
+                  'table_chart',
+                  isTR ? 'Excel Olarak Dışa Aktar (.xls)' : 'Export to Excel (.xls)',
+                  undefined,
+                  onExportExcel
+                )}
+              {onExportCsv &&
+                renderItem(
+                  'download',
+                  isTR ? 'CSV Olarak Dışa Aktar (.csv)' : 'Export to CSV (.csv)',
+                  undefined,
+                  onExportCsv
+                )}
+            </>
           )}
         </>
       )}

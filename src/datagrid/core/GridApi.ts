@@ -111,4 +111,14 @@ export interface GridApi {
    * Access the underlying StreamingEngine instance for custom pulse configurations.
    */
   getStreamingEngine?(): any;
+
+  /**
+   * Export grid data as CSV file and trigger browser download.
+   */
+  exportDataAsCsv?(filename?: string): void;
+
+  /**
+   * Export grid data as native Excel (.xls) file with formatting and trigger browser download.
+   */
+  exportDataAsExcel?(filename?: string): void;
 }

@@ -25,6 +25,7 @@ export interface ToolBarProps {
   searchKeyword: string;
   onSearchChange: (keyword: string) => void;
   onExportCsv: () => void;
+  onExportExcel?: () => void;
   groups: string[];
   onToggleGroupColumn: (columnId: string) => void;
   onExpandAllGroups?: () => void;
@@ -66,6 +67,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   searchKeyword,
   onSearchChange,
   onExportCsv,
+  onExportExcel,
   groups,
   onToggleGroupColumn,
   onExpandAllGroups,
@@ -134,6 +136,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   const showLocaleSwitch = toolbarConfig?.showLocaleSwitch !== false;
   const showThemeSwitch = toolbarConfig?.showThemeSwitch !== false;
   const showExportCsv = toolbarConfig?.showExportCsv !== false;
+  const showExportExcel = toolbarConfig?.showExportExcel !== false;
 
   const isReadonlyMode = permissions?.mode === 'readonly' || permissions?.mode === 'read';
   const canAdd = !isReadonlyMode && permissions?.allowAdding !== false;
@@ -1401,6 +1404,17 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           )}
 
           {rightCustomItems.map(renderCustomItem)}
+
+          {(!isMobile || showMobileMore) && showExportExcel && permissions?.allowExport !== false && onExportExcel && (
+            <button
+              type="button"
+              onClick={onExportExcel}
+              title={locale.exportExcel || (isTR ? 'Excel İndir' : 'Export Excel')}
+              style={btnStyle(false, false)}
+            >
+              {renderBtnContent('table_chart', locale.exportExcel || (isTR ? 'Excel' : 'Excel'), undefined)}
+            </button>
+          )}
 
           {(!isMobile || showMobileMore) && showExportCsv && permissions?.allowExport !== false && (
             <button
