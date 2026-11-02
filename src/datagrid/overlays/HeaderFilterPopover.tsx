@@ -547,10 +547,13 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
             },
           ];
         } else {
-          // Always guarantee that Blank is placed at the very top (index 0) of the distinct values list
-          const blanks: DistinctItem[] = [];
+          // Always guarantee that Blank is placed at the very top (index 0) of the distinct values list (deduplicated)
+          let hasBlank = false;
+          let blankCountSum = 0;
+          let hasExplicitBlankCount = false;
           const nonBlanks: DistinctItem[] = [];
           for (const it of processedRes) {
+            if (!it || typeof it !== 'object') continue;
             if (
               it.value === BLANK_FILTER_TOKEN ||
               it.value === '' ||
@@ -560,15 +563,24 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
               it.label === '(Boş)' ||
               it.label === '(Boş / Blank)'
             ) {
-              blanks.push({
-                ...it,
-                value: BLANK_FILTER_TOKEN,
-                label: locale.emptyText || '(Blank)',
-              });
+              hasBlank = true;
+              if (typeof it.count === 'number' && !isNaN(it.count)) {
+                blankCountSum += it.count;
+                hasExplicitBlankCount = true;
+              }
             } else {
               nonBlanks.push(it);
             }
           }
+          const blanks: DistinctItem[] = hasBlank
+            ? [
+                {
+                  value: BLANK_FILTER_TOKEN,
+                  label: locale.emptyText || '(Blank)',
+                  count: hasExplicitBlankCount ? blankCountSum : undefined,
+                },
+              ]
+            : [];
           processedRes = [...blanks, ...nonBlanks];
         }
 
@@ -667,6 +679,16 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   }, [onClose]);
 
   const formatItemLabel = (it: DistinctItem): string => {
+    if (
+      it.value === BLANK_FILTER_TOKEN ||
+      it.value === WITH_FILE_FILTER_TOKEN ||
+      it.value === WITHOUT_FILE_FILTER_TOKEN ||
+      it.value === null ||
+      it.value === undefined ||
+      it.value === ''
+    ) {
+      return formatCellStructureValue(it.value, column, locale);
+    }
     if (isDateCol || (typeof it.value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(it.value.trim()))) {
       return FilterEngine.formatLocalizedDate(it.value, locale.code, colType === 'datetime');
     }
