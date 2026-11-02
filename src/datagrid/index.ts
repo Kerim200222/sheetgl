@@ -110,3 +110,5 @@ export type {
 
 export { StreamingEngine } from './core/StreamingEngine';
 export type { CellFlash, CellFlashState, FlashType } from './core/StreamingEngine';
+export { ExportEngine } from './export/ExportEngine';
+export type { CsvExportOptions, ExcelExportOptions } from './export/ExportEngine';

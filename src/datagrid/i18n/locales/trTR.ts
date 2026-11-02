@@ -7,6 +7,7 @@ export const trTR: IGridLocale = {
   searchPlaceholder: 'Tabloda ara (Ctrl+F)...',
   addGroup: '+ Gruba Ekle',
   exportCsv: 'CSV İndir',
+  exportExcel: 'Excel İndir',
   rows: 'Satır',
   columns: 'Sütun',
   systemTheme: 'Sistem (Otomatik)',

@@ -7,6 +7,7 @@ export const enUS: IGridLocale = {
   searchPlaceholder: 'Search in table (Ctrl+F)...',
   addGroup: '+ Add to Group',
   exportCsv: 'Export CSV',
+  exportExcel: 'Export Excel',
   rows: 'Rows',
   columns: 'Columns',
   systemTheme: 'System (Auto)',
