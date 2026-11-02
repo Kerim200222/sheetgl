@@ -1985,7 +1985,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       }
     };
 
-    const handleWindowMouseUp = () => {
+    const handleWindowMouseUp = async () => {
       if (isDraggingSelection) {
         setIsDraggingSelection(false);
       }
