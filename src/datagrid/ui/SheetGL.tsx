@@ -3095,8 +3095,54 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     [permissions, store, applyBatchCellUpdates, currentLocale, showToast]
   );
 
+  const copyTextToClipboard = useCallback(
+    (tsv: string) => {
+      internalClipboardRef.current = tsv;
+      let copied = false;
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(tsv).catch(() => {});
+        copied = true;
+      }
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = tsv;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-9999px';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        copied = true;
+      } catch {
+        // Ignore fallback error
+      }
+      if (copied) {
+        const preview = tsv.replace(/\s+/g, ' ').trim();
+        const shortPreview = preview.length > 42 ? `${preview.slice(0, 42)}...` : preview;
+        showToast(
+          currentLocale.code.startsWith('tr')
+            ? `📋 Panoya kopyalandı: ${shortPreview || '(boş)'}`
+            : `📋 Copied to clipboard: ${shortPreview || '(empty)'}`,
+          'info'
+        );
+      }
+    },
+    [currentLocale, showToast]
+  );
+
   const handleCopy = (e: React.ClipboardEvent) => {
     if (activeOverlay) return;
+    const targetEl = e.target as HTMLElement | null;
+    if (
+      targetEl &&
+      (targetEl.tagName === 'INPUT' ||
+        targetEl.tagName === 'TEXTAREA' ||
+        targetEl.isContentEditable)
+    ) {
+      return;
+    }
     const { col } = selectionRef.current.activeCell;
     const colDef = geometryRef.current.columns[col];
     if (colDef?.type === 'sparkline') return;
@@ -3104,10 +3150,12 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     const tsv = buildSelectedTsv();
     internalClipboardRef.current = tsv;
     e.clipboardData.setData('text/plain', tsv);
+    const preview = tsv.replace(/\s+/g, ' ').trim();
+    const shortPreview = preview.length > 42 ? `${preview.slice(0, 42)}...` : preview;
     showToast(
       currentLocale.code.startsWith('tr')
-        ? '📋 Seçili hücreler panoya kopyalandı (TSV).'
-        : '📋 Selected range copied to clipboard (TSV).',
+        ? `📋 Panoya kopyalandı: ${shortPreview || '(boş)'}`
+        : `📋 Copied to clipboard: ${shortPreview || '(empty)'}`,
       'info'
     );
   };
@@ -3133,17 +3181,43 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     // Excel & Web Shortcuts with Ctrl / Meta
     if (e.ctrlKey || e.metaKey) {
       const k = e.key.toLowerCase();
-      if (k === 's') {
+      const targetEl = e.target as HTMLElement | null;
+      const isInputFocused = Boolean(
+        targetEl &&
+          (targetEl.tagName === 'INPUT' ||
+            targetEl.tagName === 'TEXTAREA' ||
+            targetEl.isContentEditable)
+      );
+      if ((k === 'c' || e.code === 'KeyC') && !isInputFocused) {
+        const domSelection = typeof window !== 'undefined' ? window.getSelection()?.toString() : '';
+        if (!domSelection) {
+          e.preventDefault();
+          const tsv = buildSelectedTsv();
+          copyTextToClipboard(tsv);
+          return;
+        }
+      }
+      if ((k === 'v' || e.code === 'KeyV') && !isInputFocused) {
+        if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
+          e.preventDefault();
+          navigator.clipboard
+            .readText()
+            .then((txt) => applyPastedTsv(txt || internalClipboardRef.current))
+            .catch(() => applyPastedTsv(internalClipboardRef.current));
+          return;
+        }
+      }
+      if (k === 's' || e.code === 'KeyS') {
         e.preventDefault();
         handleSaveBatch();
         return;
       }
-      if (k === 'n') {
+      if (k === 'n' || e.code === 'KeyN') {
         e.preventDefault();
         onAddNewRow?.();
         return;
       }
-      if (k === 'd') {
+      if (k === 'd' || e.code === 'KeyD') {
         e.preventDefault();
         if (e.shiftKey) {
           handleDuplicateRow(row);
@@ -3153,11 +3227,11 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         return;
       }
       // Note: Never hijack Ctrl+R / Ctrl+F5 for cell duplication; allow browser reload
-      if (k === 'r' || k === 'f5') {
+      if (k === 'r' || k === 'f5' || e.code === 'KeyR') {
         onRefresh?.();
         return;
       }
-      if (k === 'z') {
+      if (k === 'z' || e.code === 'KeyZ') {
         e.preventDefault();
         if (e.shiftKey) historyRef.current.redo();
         else historyRef.current.undo();
@@ -3165,14 +3239,14 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         requestRender();
         return;
       }
-      if (k === 'y') {
+      if (k === 'y' || e.code === 'KeyY') {
         e.preventDefault();
         historyRef.current.redo();
         setStoreVersion((v) => v + 1);
         requestRender();
         return;
       }
-      if (k === 'a') {
+      if (k === 'a' || e.code === 'KeyA') {
         e.preventDefault();
         if (store.getRowCount() > 0 && geometryRef.current.columns.length > 0) {
           selectionRef.current.setActiveCell(0, 0);
@@ -3530,6 +3604,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             if (currentColumn) {
               commitSingleCellEdit(selectedCellUI.row, currentColumn, newVal, true);
             }
+          }}
+          onCopyValue={(valText) => {
+            const tsv = valText || buildSelectedTsv();
+            copyTextToClipboard(tsv);
           }}
           onDuplicateDown={handleDuplicateCellDown}
           onDuplicateRight={handleDuplicateCellRight}

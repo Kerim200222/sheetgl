@@ -16,6 +16,7 @@ export interface FormulaBarProps {
   canDuplicate?: boolean;
   buttonDisplayMode?: ToolbarButtonDisplayMode;
   onCommitValue?: (newValue: any) => void;
+  onCopyValue?: (valueText: string) => void;
   onDuplicateDown?: () => void;
   onDuplicateRight?: () => void;
   onDuplicateRow?: () => void;
@@ -685,6 +686,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   canDuplicate = true,
   buttonDisplayMode = 'icon-text',
   onCommitValue,
+  onCopyValue,
   onDuplicateDown,
   onDuplicateRight,
   onDuplicateRow,
@@ -694,6 +696,18 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
 }) => {
   const isTR = locale?.code?.startsWith('tr');
   const isSparkline = column?.type === 'sparkline';
+  const [copiedFlash, setCopiedFlash] = useState(false);
+
+  const handleCopyCurrent = () => {
+    const textToCopy = String(displayVal ?? '');
+    if (onCopyValue) {
+      onCopyValue(textToCopy);
+    } else if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(textToCopy).catch(() => {});
+    }
+    setCopiedFlash(true);
+    window.setTimeout(() => setCopiedFlash(false), 1200);
+  };
 
   const isMultiSelectCol =
     column?.type === 'multiselect' ||
@@ -919,7 +933,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
             outline: 'none',
           }}
         />
-      ) : isMultiSelectCol ? (
+      ) : isEditable && isMultiSelectCol ? (
         <FormulaBarMultiSelect
           column={column}
           currentValue={currentValue}
@@ -928,7 +942,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
           theme={theme}
           locale={locale}
         />
-      ) : isSelectCol ? (
+      ) : isEditable && isSelectCol ? (
         <FormulaBarSelect
           column={column}
           currentValue={currentValue}
@@ -937,7 +951,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
           theme={theme}
           locale={locale}
         />
-      ) : isDateCol ? (
+      ) : isEditable && isDateCol ? (
         <FormulaBarDate
           column={column}
           currentValue={currentValue}
@@ -946,7 +960,7 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
           theme={theme}
           locale={locale}
         />
-      ) : isBoolCol ? (
+      ) : isEditable && isBoolCol ? (
         <FormulaBarBoolean
           currentValue={currentValue}
           isEditable={isEditable}
@@ -959,7 +973,12 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
           type="text"
           value={draft}
           readOnly={!isEditable || isSparkline || column?.type === 'action'}
-          onFocus={() => setIsFocused(true)}
+          onFocus={(e) => {
+            setIsFocused(true);
+            if (!isEditable) {
+              e.currentTarget.select();
+            }
+          }}
           onBlur={() => {
             setIsFocused(false);
             commitDraft();
@@ -1000,8 +1019,43 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
             fontSize: 12,
             outline: 'none',
             boxSizing: 'border-box',
+            userSelect: 'text',
           }}
         />
+      )}
+
+      {/* Copy Active Cell Value Button (Works on both Editable and ReadOnly cells) */}
+      {column && (
+        <button
+          type="button"
+          onClick={handleCopyCurrent}
+          title={
+            isTR
+              ? 'Aktif hücre değerini panoya kopyala (Ctrl+C)'
+              : 'Copy active cell value to clipboard (Ctrl+C)'
+          }
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: isMobile ? '3px 6px' : '3px 8px',
+            borderRadius: 4,
+            border: `1px solid ${copiedFlash ? '#30D158' : theme.canvas.gridLine}`,
+            backgroundColor: copiedFlash ? 'rgba(48, 209, 88, 0.14)' : theme.canvas.bg,
+            color: copiedFlash ? '#30D158' : theme.canvas.cellText,
+            cursor: 'pointer',
+            fontSize: 11,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          {renderBtnContent(
+            copiedFlash ? 'check' : 'content_copy',
+            copiedFlash ? (isTR ? 'Kopyalandı' : 'Copied') : isTR ? 'Kopyala' : 'Copy',
+            copiedFlash ? '#30D158' : undefined
+          )}
+        </button>
       )}
 
       {/* Excel Duplicate Down Button */}
