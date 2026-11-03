@@ -28,6 +28,7 @@ import { GroupDescriptor, SummaryType } from '../types/group';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ThemeEngine, ThemeInput } from '../theme/ThemeEngine';
 import { GeometryEngine } from '../core/GeometryEngine';
+import { StreamingEngine } from '../core/StreamingEngine';
 import { SelectionModel } from '../core/SelectionModel';
 import { HistoryManager } from '../core/HistoryManager';
 import { ValidationEngine } from '../core/ValidationEngine';
@@ -726,6 +727,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     [columnFilters]
   );
 
+  // 5c. Real-time Streaming Engine (Cell Flashing & Pulse Buffer)
+  const streamingEngineRef = useRef<StreamingEngine>(new StreamingEngine());
+
   // 6. 60 FPS Render Loop
   const requestRender = useCallback(() => {
     if (!canvasRef.current) return;
@@ -759,7 +763,13 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         selectionMode: rowSelectionMode,
         selectedRowKeys: selectedRowKeysSet,
         zebraStriping: zebraStriping ?? rowAlternationEnabled ?? true,
+        streamingEngine: streamingEngineRef.current,
       });
+
+      // Keep RAF loop alive as long as there are active fading pulses
+      if (streamingEngineRef.current?.hasActiveFlashes()) {
+        requestAnimationFrame(() => requestRenderRef.current());
+      }
     });
   }, [
     store,
@@ -830,6 +840,13 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           setActiveOverlay(null);
         }
       },
+      applyTransaction: async (updates: any[], idField?: string) => {
+        const key = idField || (store as any).keyField || 'id';
+        await streamingEngineRef.current.applyTransaction(updates, key, store);
+        setStoreVersion((v) => v + 1);
+        requestRender();
+      },
+      getStreamingEngine: () => streamingEngineRef.current,
     }),
     [
       requestRender,
