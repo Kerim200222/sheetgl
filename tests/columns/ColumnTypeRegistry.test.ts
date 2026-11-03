@@ -87,7 +87,7 @@ describe('ColumnTypeRegistry & Plugin System', () => {
     it('should register a custom column plugin and allow retrieval', () => {
       const mockCustomPlugin: IColumnTypePlugin = {
         type: 'barcode',
-        editor: () => null,
+        paint: () => {},
       };
 
       ColumnTypeRegistry.register(mockCustomPlugin);
