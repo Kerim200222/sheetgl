@@ -106,3 +106,6 @@ export type {
   CellCommitDirection,
   CellEditorComponent,
 } from './editing';
+
+export { StreamingEngine } from './core/StreamingEngine';
+export type { CellFlash, CellFlashState, FlashType } from './core/StreamingEngine';

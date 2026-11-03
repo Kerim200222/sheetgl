@@ -101,4 +101,14 @@ export interface GridApi {
    * Programmatically stop editing the active cell.
    */
   stopEditingCell?(cancel?: boolean): void;
+  /**
+   * Apply high-frequency real-time data updates with visual cell pulse/flash animations.
+   * Compares numeric old vs new values to paint green (up) or red (down) fading highlights.
+   */
+  applyTransaction?(updates: any[], idField?: string): Promise<void> | void;
+
+  /**
+   * Access the underlying StreamingEngine instance for custom pulse configurations.
+   */
+  getStreamingEngine?(): any;
 }
