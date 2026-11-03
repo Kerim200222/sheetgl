@@ -22,7 +22,7 @@ import {
   SavingEvent,
   SavedEvent,
 } from '../types/grid';
-import { IDataStore, BatchChanges, RemoteOperationsConfig } from '../types/store';
+import { IDataStore, RemoteOperationsConfig } from '../types/store';
 import { ColumnFilterState, FilterDescriptor, SortDescriptor } from '../types/filter';
 import { GroupDescriptor, SummaryType } from '../types/group';
 import { IGridThemeTokens } from '../theme/IGridTheme';

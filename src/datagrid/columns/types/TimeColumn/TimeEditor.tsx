@@ -35,7 +35,9 @@ export const TimeEditor: React.FC<CellEditorProps<string>> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const latestValRef = useRef<string>(timeVal);
-  latestValRef.current = timeVal;
+  useEffect(() => {
+    latestValRef.current = timeVal;
+  }, [timeVal]);
 
   const isTR = locale?.code?.startsWith('tr');
 

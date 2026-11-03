@@ -37,7 +37,6 @@ export const SparklineModalOverlay: React.FC<SparklineModalOverlayProps> = ({
 
   const minVal = Math.min(...points);
   const maxVal = Math.max(...points);
-  const minIdx = points.indexOf(minVal);
   const maxIdx = points.indexOf(maxVal);
   const sumVal = points.reduce((a, b) => a + b, 0);
   const avgVal = sumVal / n;

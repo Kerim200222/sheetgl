@@ -8,7 +8,8 @@ export { useGridGeometry } from './hooks/useGridGeometry';
 export type { UseGridGeometryOptions, UseGridGeometryReturn, ColumnResizeState } from './hooks/useGridGeometry';
 export { SheetGLLogo } from './ui/SheetGLLogo';
 export type { SheetGLLogoProps } from './ui/SheetGLLogo';
-export { MaterialIcon, ensureMaterialSymbolsLoaded } from './ui/MaterialIcon';
+export { MaterialIcon } from './ui/MaterialIcon';
+export { ensureMaterialSymbolsLoaded } from './ui/materialIconLoader';
 export type { MaterialIconProps } from './ui/MaterialIcon';
 
 export { LocalDataStore } from './data/LocalDataStore';

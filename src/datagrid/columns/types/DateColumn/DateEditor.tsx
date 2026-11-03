@@ -84,8 +84,11 @@ export const DateEditor: React.FC<CellEditorProps<string>> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const latestValRef = useRef<string>(dateVal);
-  latestValRef.current = dateVal;
   const committedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    latestValRef.current = dateVal;
+  }, [dateVal]);
 
   const normalizeCommitValue = (rawStr: string): string => {
     const trimmed = rawStr.trim();

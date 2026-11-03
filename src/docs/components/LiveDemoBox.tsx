@@ -54,7 +54,10 @@ export const LiveDemoBox: React.FC<LiveDemoBoxProps> = ({
   permissions,
 }) => {
   const [resetKey, setResetKey] = useState<number>(0);
-  const clonedData = useMemo(() => JSON.parse(JSON.stringify(data)), [data, resetKey]);
+  const clonedData = useMemo(() => {
+    void resetKey;
+    return JSON.parse(JSON.stringify(data));
+  }, [data, resetKey]);
 
   const resolvedToolbar = useMemo<boolean | GridToolbarConfig>(() => {
     if (toolbar !== undefined) return toolbar;

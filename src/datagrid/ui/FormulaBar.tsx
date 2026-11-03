@@ -738,6 +738,8 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
       : String(currentValue)
     : '';
 
+  const currentCellKey = `${activeCoords.row}:${activeCoords.col}:${displayVal}`;
+  const [prevCellKey, setPrevCellKey] = useState<string>(currentCellKey);
   const [draft, setDraft] = useState<string>(displayVal);
   const [isFocused, setIsFocused] = useState<boolean>(false);
   const [isMobile, setIsMobile] = useState<boolean>(() =>
@@ -750,11 +752,12 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
+  if (currentCellKey !== prevCellKey) {
+    setPrevCellKey(currentCellKey);
     if (!isFocused) {
       setDraft(displayVal);
     }
-  }, [displayVal, isFocused, activeCoords.row, activeCoords.col]);
+  }
 
   const excelRef = `${getExcelColName(activeCoords.col)}${activeCoords.row + 1}`;
   const hasMultiSpan = selectionSpan && (selectionSpan.rows > 1 || selectionSpan.cols > 1);
