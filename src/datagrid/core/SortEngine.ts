@@ -30,6 +30,13 @@ export class SortEngine {
           }
         }
 
+        const isBlankA = valA === null || valA === undefined || valA === '';
+        const isBlankB = valB === null || valB === undefined || valB === '';
+        if (isBlankA || isBlankB) {
+          if (isBlankA && isBlankB) continue;
+          return isBlankA ? 1 : -1;
+        }
+
         const diff = this.compareValues(valA, valB);
         if (diff !== 0) {
           return rule.desc ? -diff : diff;

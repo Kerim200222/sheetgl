@@ -14,5 +14,6 @@
     "strict": false,
     "isolatedModules": true
   },
-  "include": ["src/datagrid/**/*"]
+  "include": ["src/datagrid/**/*"],
+  "exclude": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
 }

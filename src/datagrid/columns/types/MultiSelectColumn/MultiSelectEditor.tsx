@@ -20,7 +20,9 @@ export const MultiSelectEditor: React.FC<CellEditorProps<string[] | string>> = (
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const latestSelectedRef = useRef<string[]>(selected);
-  latestSelectedRef.current = selected;
+  useEffect(() => {
+    latestSelectedRef.current = selected;
+  }, [selected]);
 
   const isTR = locale?.code?.startsWith('tr');
 

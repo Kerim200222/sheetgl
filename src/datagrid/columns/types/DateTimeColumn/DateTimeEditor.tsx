@@ -80,7 +80,9 @@ export const DateTimeEditor: React.FC<CellEditorProps<string>> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const latestValRef = useRef<string>(textVal);
-  latestValRef.current = textVal;
+  useEffect(() => {
+    latestValRef.current = textVal;
+  }, [textVal]);
 
   const buildFormatted = (y: number, m: number, d: number, hh: number, mm: number) =>
     `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;

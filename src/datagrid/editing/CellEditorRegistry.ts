@@ -25,14 +25,20 @@ export class CellEditorRegistry {
   }
 
   /**
-   * Unregisters an editor component for the specified type.
+   * Unregisters an editor component for the specified type (case-insensitive).
    */
   public static unregister(type: string): boolean {
     if (!type) return false;
     const key = type.toLowerCase();
-    const removedLower = this.editors.delete(key);
-    const removedExact = this.editors.delete(type);
-    return removedLower || removedExact;
+    let removed = false;
+    for (const k of Array.from(this.editors.keys())) {
+      if (k.toLowerCase() === key) {
+        if (this.editors.delete(k)) {
+          removed = true;
+        }
+      }
+    }
+    return removed;
   }
 
   /**

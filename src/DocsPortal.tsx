@@ -48,13 +48,13 @@ export const DocsPortal: React.FC<DocsPortalProps> = ({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  useEffect(() => {
-    const nextSec = initialSectionId || initialSection;
-    if (nextSec && nextSec !== activeSectionId) {
-      setActiveSectionId(nextSec);
-      setExpandedSections((prev) => ({ ...prev, [nextSec]: true }));
-    }
-  }, [initialSection, initialSectionId]);
+  const nextSec = initialSectionId || initialSection;
+  const [prevSecProp, setPrevSecProp] = useState<string | undefined>(nextSec);
+  if (nextSec && nextSec !== prevSecProp) {
+    setPrevSecProp(nextSec);
+    setActiveSectionId(nextSec);
+    setExpandedSections((prev) => ({ ...prev, [nextSec]: true }));
+  }
 
   const colors = useMemo(() => getDocThemeColors(isDark), [isDark]);
 

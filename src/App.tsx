@@ -356,7 +356,7 @@ export function App() {
   const [lastSavePayload, setLastSavePayload] = useState<any>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<(string | number)[]>([]);
   const [selectedRecordModal, setSelectedRecordModal] = useState<Record<string, any> | null>(null);
-  const [eventLogs, setEventLogs] = useState<GridEventLogEntry[]>([
+  const [eventLogs, setEventLogs] = useState<GridEventLogEntry[]>(() => [
     {
       id: 'init-1',
       timestamp: new Date().toLocaleTimeString(),
