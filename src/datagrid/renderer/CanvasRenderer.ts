@@ -1,5 +1,6 @@
 import { GeometryEngine } from '../core/GeometryEngine';
 import { SelectionModel } from '../core/SelectionModel';
+import { StreamingEngine } from '../core/StreamingEngine';
 import { IDataStore } from '../types/store';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ColumnTypeRegistry } from '../columns/ColumnTypeRegistry';
@@ -34,6 +35,7 @@ export interface RenderParams {
   selectionMode?: RowSelectionMode;
   selectedRowKeys?: Set<any>;
   zebraStriping?: boolean | string | { light: string; dark: string };
+  streamingEngine?: StreamingEngine | null;
 }
 
 export class CanvasRenderer {
@@ -65,7 +67,10 @@ export class CanvasRenderer {
       selectionMode = 'none',
       selectedRowKeys,
       zebraStriping = true,
+      streamingEngine,
     } = params;
+
+    const now = performance.now();
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -233,7 +238,9 @@ export class CanvasRenderer {
             permissions,
             selectionMode,
             selectedRowKeys,
-            colStyle
+            colStyle,
+            streamingEngine,
+            now
           );
         }
         ctx.restore();
@@ -276,7 +283,9 @@ export class CanvasRenderer {
             permissions,
             selectionMode,
             selectedRowKeys,
-            colStyle
+            colStyle,
+            streamingEngine,
+            now
           );
 
           curFrozenX += col.width;
@@ -552,7 +561,9 @@ export class CanvasRenderer {
     permissions?: GridPermissions,
     selectionMode: RowSelectionMode = 'none',
     selectedRowKeys?: Set<any>,
-    colStyle?: ResolvedColumnStyle
+    colStyle?: ResolvedColumnStyle,
+    streamingEngine?: StreamingEngine | null,
+    now: number = 0
   ): void {
     const cellVal = typeof rowData[col.id] === 'function' ? undefined : rowData[col.id];
     const isHovered = hoveredCell?.row === rowIndex && hoveredCell?.col === colIdx;
@@ -664,6 +675,24 @@ export class CanvasRenderer {
     ) {
       ctx.fillStyle = theme.canvas.searchHighlight;
       ctx.fillRect(cellX, rowY, colW, rowH);
+    }
+
+    // Real-time Streaming Cell Flash / Pulse Effect
+    if (streamingEngine) {
+      const flash = streamingEngine.getFlash(rowKey, col.id, now);
+      if (flash && flash.opacity > 0) {
+        ctx.save();
+        const alpha = flash.opacity;
+        const flashColor =
+          flash.type === 'up'
+            ? `rgba(48, 209, 88, ${alpha})`
+            : flash.type === 'down'
+            ? `rgba(255, 69, 58, ${alpha})`
+            : `rgba(10, 132, 255, ${alpha})`;
+        ctx.fillStyle = flashColor;
+        ctx.fillRect(cellX, rowY, colW, rowH);
+        ctx.restore();
+      }
     }
 
     // Column type plugin paint (with optional theme-aware columnText override)
