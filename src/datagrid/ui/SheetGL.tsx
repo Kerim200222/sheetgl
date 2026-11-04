@@ -799,12 +799,14 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       onExport();
       return;
     }
-    ExportEngine.exportAsCsv(geometryRef.current.columns, store, filename);
+    const safeFilename = typeof filename === 'string' && filename.trim() ? filename.trim() : undefined;
+    ExportEngine.exportAsCsv(geometryRef.current.columns, store, safeFilename);
   }, [permissions.allowExport, onExport, store]);
 
   const exportExcel = useCallback((filename?: string) => {
     if (permissions.allowExport === false) return;
-    ExportEngine.exportAsExcel(geometryRef.current.columns, store, filename);
+    const safeFilename = typeof filename === 'string' && filename.trim() ? filename.trim() : undefined;
+    ExportEngine.exportAsExcel(geometryRef.current.columns, store, safeFilename);
   }, [permissions.allowExport, store]);
 
   // 6b. Expose Imperative GridApi

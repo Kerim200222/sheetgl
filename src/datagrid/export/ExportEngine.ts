@@ -151,10 +151,13 @@ export class ExportEngine {
     const csvContent = this.generateCsvContent(columns, store, options);
     const output = (bom ? '\uFEFF' : '') + csvContent;
     const blob = new Blob([output], { type: 'text/csv;charset=utf-8;' });
+    const defaultFilename = `sheetgl_export_${new Date().toISOString().slice(0, 10)}.csv`;
     const targetFilename =
-      filename ||
-      options.filename ||
-      `sheetgl_export_${new Date().toISOString().slice(0, 10)}.csv`;
+      typeof filename === 'string' && filename.trim()
+        ? filename.trim()
+        : typeof options.filename === 'string' && options.filename.trim()
+        ? options.filename.trim()
+        : defaultFilename;
 
     this.triggerDownload(blob, targetFilename);
   }
@@ -311,10 +314,13 @@ ${headerRowXml}${rowsXml.join('\n')}
     const blob = new Blob([xmlContent], {
       type: 'application/vnd.ms-excel;charset=utf-8;',
     });
+    const defaultFilename = `sheetgl_export_${new Date().toISOString().slice(0, 10)}.xls`;
     const targetFilename =
-      filename ||
-      options.filename ||
-      `sheetgl_export_${new Date().toISOString().slice(0, 10)}.xls`;
+      typeof filename === 'string' && filename.trim()
+        ? filename.trim()
+        : typeof options.filename === 'string' && options.filename.trim()
+        ? options.filename.trim()
+        : defaultFilename;
 
     this.triggerDownload(blob, targetFilename);
   }

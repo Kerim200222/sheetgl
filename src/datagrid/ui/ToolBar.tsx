@@ -1408,7 +1408,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           {(!isMobile || showMobileMore) && showExportExcel && permissions?.allowExport !== false && onExportExcel && (
             <button
               type="button"
-              onClick={onExportExcel}
+              onClick={() => onExportExcel()}
               title={locale.exportExcel || (isTR ? 'Excel İndir' : 'Export Excel')}
               style={btnStyle(false, false)}
             >
@@ -1419,7 +1419,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
           {(!isMobile || showMobileMore) && showExportCsv && permissions?.allowExport !== false && (
             <button
               type="button"
-              onClick={onExportCsv}
+              onClick={() => onExportCsv()}
               title={locale.exportCsv}
               style={btnStyle(false, true)}
             >
