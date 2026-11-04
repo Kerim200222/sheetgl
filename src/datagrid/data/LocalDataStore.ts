@@ -394,7 +394,7 @@ export class LocalDataStore implements IDataStore {
   }
 
   public async deleteRow(rowKey: any): Promise<void> {
-    const idx = this.rawData.findIndex((r) => r[this.keyField] === rowKey);
+    const idx = this.rawData.findIndex((r) => r[this.keyField] === rowKey || String(r[this.keyField]) === String(rowKey));
     if (idx === -1) return Promise.resolve();
 
     const [removed] = this.rawData.splice(idx, 1);
@@ -423,6 +423,7 @@ export class LocalDataStore implements IDataStore {
   ): Promise<number> {
     if (!rowKeys || rowKeys.length === 0) return 0;
     const keySet = new Set<any>(rowKeys);
+    const strKeySet = new Set<string>(rowKeys.map((k) => String(k)));
     const totalToProcess = keySet.size;
     const totalRaw = this.rawData.length;
     const keptRows: Record<string, any>[] = [];
@@ -436,7 +437,8 @@ export class LocalDataStore implements IDataStore {
       for (let i = start; i < end; i++) {
         const row = this.rawData[i];
         const rk = row[this.keyField];
-        if (keySet.has(rk)) {
+        const isMatch = keySet.has(rk) || strKeySet.has(String(rk));
+        if (isMatch) {
           removedCount++;
           if (this.batchMode) {
             if (this.insertedKeys.has(rk)) {

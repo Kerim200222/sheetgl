@@ -128,6 +128,7 @@ export interface SheetGLProps {
   onRowUpdated?: (e: RowUpdatedEvent) => void;
   onRowRemoving?: (e: RowRemovingEvent) => void | Promise<void>;
   onRowRemoved?: (e: RowRemovedEvent) => void;
+  onRowsRemoved?: (keys: any[]) => void;
   onSaving?: (e: SavingEvent) => void | Promise<void>;
   onSaved?: (e: SavedEvent) => void;
   onAddNewRow?: () => void;
@@ -223,6 +224,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onRowUpdated,
     onRowRemoving,
     onRowRemoved,
+    onRowsRemoved,
     onSaving,
     onSaved,
     onAddNewRow,
@@ -1605,10 +1607,13 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
       setSelectedRowKeysSet(new Set());
       onSelectionChanged?.([], []);
-      onRowRemoved?.({
-        key: `${rowKeys.length} rows`,
-        data: { deletedCount: rowKeys.length, sampleKeys: rowKeys.slice(0, 20) },
-      });
+      onRowsRemoved?.(rowKeys);
+      for (const rk of rowKeys) {
+        onRowRemoved?.({
+          key: rk,
+          data: { id: rk },
+        });
+      }
       setDeleteConfirmModal(null);
       showToast(
         currentLocale.code.startsWith('tr')
@@ -1626,6 +1631,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       onSelectionChanged,
       onRowRemoving,
       onRowRemoved,
+      onRowsRemoved,
       currentLocale,
       showToast,
       requestRender,

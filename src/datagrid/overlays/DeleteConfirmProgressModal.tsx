@@ -203,7 +203,7 @@ export const DeleteConfirmProgressModal: React.FC<DeleteConfirmProgressModalProp
                         #{r.id} {r.code ? `• ${r.code}` : ''}
                       </span>
                       <span style={{ opacity: 0.85 }}>
-                        {r.company || r.name || r.city || ''}
+                        {r.fullName || r.company || r.name || r.city || ''}
                       </span>
                     </div>
                   ))}
