@@ -36,20 +36,31 @@ for /f "delims=" %%u in ('call npm whoami') do set "NPM_USER=%%u"
 echo [OK] NPM kullanicisi: %NPM_USER%
 echo.
 
-REM 2. Surum artis islemi (Varsayilan: Otomatik patch)
-set "BUMP_TYPE=%~1"
-if "%BUMP_TYPE%"=="" set "BUMP_TYPE=patch"
+REM 2. Surum artis islemi (10 patch'te minor, 10 minor'de major otomatik artar)
+set "BUMP_PARAM=%~1"
 
-:apply_version
-if /i "%BUMP_TYPE%"=="deploy" (
+if /i "%BUMP_PARAM%"=="deploy" (
     set "NEW_VER=%CURRENT_VER%"
     goto deploy_remote
 )
-echo.
-if /i "%BUMP_TYPE%"=="none" goto keep_version
+if /i "%BUMP_PARAM%"=="none" (
+    set "NEW_VER=%CURRENT_VER%"
+    goto keep_version
+)
 
-echo [2/6] Surum otomatik patch olarak arttiriliyor: %BUMP_TYPE% ...
-call npm version %BUMP_TYPE% --no-git-tag-version
+if "%BUMP_PARAM%"=="" goto calc_auto_ver
+if /i "%BUMP_PARAM%"=="patch" goto calc_auto_ver
+
+REM Ozel veya standart parametre (minor, major veya 2.1.0 vb.)
+set "TARGET_VER=%BUMP_PARAM%"
+goto apply_version
+
+:calc_auto_ver
+for /f "delims=" %%v in ('node -e "const [M,m,p]=require('./package.json').version.split('.').map(Number); let np=p+1,nm=m,nM=M; if(Math.floor(np/10)!==0){np=0;nm++;} if(Math.floor(nm/10)!==0){nm=0;nM++;} console.log([nM,nm,np].join('.'));"') do set "TARGET_VER=%%v"
+
+:apply_version
+echo [2/6] Surum guncelleniyor: v%CURRENT_VER% -^> v%TARGET_VER% ...
+call npm version %TARGET_VER% --no-git-tag-version
 if errorlevel 1 (
     echo [HATA] Surum numarasi guncellenemedi.
     popd
