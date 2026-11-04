@@ -49,7 +49,7 @@ import { initDefaultColumnPlugins } from '../columns/initPlugins';
 import { ColumnTypeRegistry } from '../columns/ColumnTypeRegistry';
 import { CellEditorRegistry } from '../editing/CellEditorRegistry';
 import { LocaleEngine, LocaleInput, IGridLocale } from '../i18n/LocaleEngine';
-import { RowGroupingEngine, isGroupRow, GroupedRow } from '../utils/grouping/RowGroupingEngine';
+import { RowGroupingEngine, isGroupRow, GroupedRow, GroupAggregation } from '../utils/grouping/RowGroupingEngine';
 
 export interface SheetGLProps {
   dataSource: any[] | IDataStore;
@@ -245,7 +245,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     storageKey,
     onScrollChange,
     onExport,
-    groupBy: userGroupBy = [],
+    groupBy: userGroupBy,
     expandedGroupKeys: userExpandedGroupKeys,
     onGroupExpansionChanged,
     style,
@@ -259,7 +259,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   }, []);
 
   // 2. DataStore Adaptation
-  const store = useMemo<IDataStore>(() => {
+  const rawStore = useMemo<IDataStore>(() => {
     if (Array.isArray(dataSource)) {
       const initialSummaries: Record<string, SummaryType> = {};
       userColumns.forEach((c) => {
@@ -288,35 +288,83 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   }, [dataSource]);
 
   useEffect(() => {
-    store.setBatchMode?.(batchEditMode);
-  }, [store, batchEditMode]);
+    rawStore.setBatchMode?.(batchEditMode);
+  }, [rawStore, batchEditMode]);
 
-  // 2b. Enterprise Row Grouping Pipeline (RowGroupingEngine)
-  const [internalGroupBy, setInternalGroupBy] = useState<string[]>(userGroupBy || []);
+  const requestRenderRef = useRef<() => void>(() => {});
+  const [storeVersion, setStoreVersion] = useState<number>(0);
+
+  // 2b. Unified Enterprise Row Grouping Pipeline (RowGroupingEngine + ToolBar groups sync)
+  const [groups, setGroups] = useState<GroupDescriptor[]>(() =>
+    userGroupBy && userGroupBy.length > 0
+      ? userGroupBy.map((s) => ({ selector: s }))
+      : initialGroups
+  );
+  const [internalGroupBy, setInternalGroupBy] = useState<string[]>(() =>
+    userGroupBy && userGroupBy.length > 0
+      ? [...userGroupBy]
+      : initialGroups.map((g) => g.selector)
+  );
+  const [defaultGroupsExpanded, setDefaultGroupsExpanded] = useState<boolean>(() =>
+    userExpandedGroupKeys
+      ? false
+      : initialGroups.length > 0
+      ? initialGroups.some((g) => Boolean(g.isExpanded))
+      : true
+  );
   const [internalExpandedGroupKeys, setInternalExpandedGroupKeys] = useState<Set<string>>(
     () => new Set(userExpandedGroupKeys || [])
   );
   const [groupVersion, setGroupVersion] = useState<number>(0);
 
+  const prevUserGroupByRef = useRef<string[] | undefined>(userGroupBy);
   useEffect(() => {
-    if (userGroupBy) {
-      setInternalGroupBy(userGroupBy);
+    if (userGroupBy !== undefined) {
+      const prev = prevUserGroupByRef.current;
+      const isSame =
+        prev !== undefined &&
+        prev.length === userGroupBy.length &&
+        prev.every((val, idx) => val === userGroupBy[idx]);
+      if (!isSame) {
+        prevUserGroupByRef.current = userGroupBy;
+        const nextDescriptors = userGroupBy.map((s) => ({ selector: s }));
+        setInternalGroupBy([...userGroupBy]);
+        setGroups(nextDescriptors);
+        if (rawStore.isRemote()) {
+          rawStore.setGrouping(nextDescriptors);
+        }
+        setGroupVersion((v) => v + 1);
+      }
     }
-  }, [userGroupBy]);
+  }, [userGroupBy, rawStore]);
 
+  const prevUserExpandedGroupKeysRef = useRef<Set<string> | string[] | undefined>(userExpandedGroupKeys);
   useEffect(() => {
-    if (userExpandedGroupKeys) {
+    if (userExpandedGroupKeys !== undefined && userExpandedGroupKeys !== prevUserExpandedGroupKeysRef.current) {
+      prevUserExpandedGroupKeysRef.current = userExpandedGroupKeys;
+      setDefaultGroupsExpanded(false);
       setInternalExpandedGroupKeys(new Set(userExpandedGroupKeys));
+      setGroupVersion((v) => v + 1);
     }
   }, [userExpandedGroupKeys]);
+
+  const defaultGroupsExpandedRef = useRef(defaultGroupsExpanded);
+  defaultGroupsExpandedRef.current = defaultGroupsExpanded;
 
   const toggleGroupKey = useCallback(
     (groupKey: string) => {
       setInternalExpandedGroupKeys((prev) => {
         const next = new Set(prev);
-        if (next.has(groupKey)) {
+        const defExp = defaultGroupsExpandedRef.current;
+        const currentlyExpanded =
+          next.has(groupKey) || (defExp && !next.has(`!${groupKey}`));
+        if (currentlyExpanded) {
           next.delete(groupKey);
+          if (defExp) {
+            next.add(`!${groupKey}`);
+          }
         } else {
+          next.delete(`!${groupKey}`);
           next.add(groupKey);
         }
         onGroupExpansionChanged?.(next);
@@ -328,46 +376,150 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     [onGroupExpansionChanged]
   );
 
-  const groupedVirtualRows = useMemo<GroupedRow[] | null>(() => {
-    if (!internalGroupBy || internalGroupBy.length === 0) return null;
+  const handleExpandAllGroups = useCallback(() => {
+    if (rawStore.isRemote()) {
+      rawStore.expandAllGroups?.();
+    }
+    setDefaultGroupsExpanded(true);
+    setInternalExpandedGroupKeys(new Set());
+    setGroupVersion((v) => v + 1);
+    setStoreVersion((v) => v + 1);
+    requestRenderRef.current();
+  }, [rawStore]);
+
+  const handleCollapseAllGroups = useCallback(() => {
+    if (rawStore.isRemote()) {
+      rawStore.collapseAllGroups?.();
+    }
+    setDefaultGroupsExpanded(false);
+    setInternalExpandedGroupKeys(new Set());
+    setGroupVersion((v) => v + 1);
+    setStoreVersion((v) => v + 1);
+    requestRenderRef.current();
+  }, [rawStore]);
+
+  const groupedProjection = useMemo<{
+    rows: GroupedRow[];
+    rawIndexMap: WeakMap<object, number>;
+  } | null>(() => {
+    if (rawStore.isRemote() || !internalGroupBy || internalGroupBy.length === 0) {
+      return null;
+    }
 
     const rawRows: any[] = [];
-    const count = store.getRowCount();
+    const rawIndexMap = new WeakMap<object, number>();
+    const count = rawStore.getRowCount();
     for (let i = 0; i < count; i++) {
-      const vr = store.getViewRow(i);
+      const vr = rawStore.getViewRow(i);
       if (!vr) continue;
       if (vr.type === 'data') {
         rawRows.push(vr.data);
-      } else if (!(vr as any).__isGroup) {
-        rawRows.push((vr as any).data || vr);
+        if (vr.data && typeof vr.data === 'object') {
+          rawIndexMap.set(vr.data, vr.rawIndex ?? i);
+        }
+      } else if (!(vr as any).__isGroup && vr.type !== 'group') {
+        const d = (vr as any).data || vr;
+        rawRows.push(d);
+        if (d && typeof d === 'object') {
+          rawIndexMap.set(d, i);
+        }
       }
     }
 
-    return RowGroupingEngine.transform(rawRows, internalGroupBy, {
+    const summaryTypesMap: Record<string, SummaryType> =
+      (rawStore as any).getSummaryTypes?.() || {};
+    const aggregations: GroupAggregation[] = [];
+    for (const [field, sType] of Object.entries(summaryTypesMap)) {
+      if (
+        sType === 'sum' ||
+        sType === 'avg' ||
+        sType === 'min' ||
+        sType === 'max' ||
+        sType === 'count'
+      ) {
+        aggregations.push({ field, type: sType });
+      }
+    }
+
+    const rows = RowGroupingEngine.transform(rawRows, internalGroupBy, {
       expandedKeys: internalExpandedGroupKeys,
-      defaultExpanded: true,
+      aggregations,
+      defaultExpanded: defaultGroupsExpanded,
     });
-  }, [store, groupVersion, internalGroupBy, internalExpandedGroupKeys]);
 
-  const effectiveStore = useMemo<IDataStore>(() => {
-    if (!groupedVirtualRows) return store;
+    return { rows, rawIndexMap };
+  }, [rawStore, storeVersion, groupVersion, internalGroupBy, internalExpandedGroupKeys, defaultGroupsExpanded]);
 
-    const proxy = Object.create(store);
-    proxy.getRowCount = () => groupedVirtualRows.length;
-    proxy.getViewRow = (index: number) => {
+  const store = useMemo<IDataStore>(() => {
+    if (!groupedProjection) return rawStore;
+
+    const { rows: groupedVirtualRows, rawIndexMap } = groupedProjection;
+
+    const getGroupedViewRow = (index: number) => {
       const item = groupedVirtualRows[index];
       if (!item) return undefined;
-      if ((item as any).__isGroup) {
-        return item as any;
+      if (isGroupRow(item)) {
+        return {
+          ...item,
+          type: 'group' as const,
+          field: item.groupField,
+          value: item.groupValue,
+          rowCount: item.childrenCount,
+          summaries: item.aggregations,
+        } as any;
       }
       return {
-        type: 'data',
-        rawIndex: (item as any).__rawIndex ?? index,
+        type: 'data' as const,
+        rawIndex: rawIndexMap.get(item) ?? (item as any).__rawIndex ?? index,
         data: item,
       } as any;
     };
-    return proxy;
-  }, [store, groupedVirtualRows]);
+
+    return new Proxy(rawStore, {
+      get(target, prop) {
+        if (prop === 'getRowCount') return () => groupedVirtualRows.length;
+        if (prop === 'getViewRow') return getGroupedViewRow;
+        if (prop === 'toggleGroup') {
+          return async (groupKey: string) => {
+            toggleGroupKey(groupKey);
+          };
+        }
+        if (prop === 'expandAllGroups') return handleExpandAllGroups;
+        if (prop === 'collapseAllGroups') return handleCollapseAllGroups;
+        if (prop === 'setGrouping') {
+          return async (descriptors: GroupDescriptor[]) => {
+            if (target.isRemote()) {
+              return target.setGrouping(descriptors);
+            }
+          };
+        }
+        if (prop === 'insertRow') {
+          return async (rowData: Record<string, any>, targetViewRowIndex?: number) => {
+            let mappedIdx = targetViewRowIndex;
+            if (targetViewRowIndex !== undefined && targetViewRowIndex >= 0) {
+              const vr = getGroupedViewRow(targetViewRowIndex);
+              mappedIdx = vr && vr.type === 'data' ? vr.rawIndex : undefined;
+            }
+            return target.insertRow(rowData, mappedIdx);
+          };
+        }
+        if (prop === 'duplicateRow') {
+          return async (rowKey: any, targetViewRowIndex?: number) => {
+            let mappedIdx = targetViewRowIndex;
+            if (targetViewRowIndex !== undefined && targetViewRowIndex >= 0) {
+              const vr = getGroupedViewRow(targetViewRowIndex);
+              mappedIdx = vr && vr.type === 'data' ? vr.rawIndex : undefined;
+            }
+            return (target as any).duplicateRow?.(rowKey, mappedIdx);
+          };
+        }
+        const val = Reflect.get(target, prop, target);
+        return typeof val === 'function' ? val.bind(target) : val;
+      },
+    });
+  }, [rawStore, groupedProjection, toggleGroupKey, handleExpandAllGroups, handleCollapseAllGroups]);
+
+  const effectiveStore = store;
 
   // 3. Theme Resolution
   const [currentThemeName, setCurrentThemeName] = useState<ThemeInput>(userTheme);
@@ -608,7 +760,6 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     }
     return initialSort;
   });
-  const [groups, setGroups] = useState<GroupDescriptor[]>(initialGroups);
   const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilterState>>(() => {
     if (storageKey) {
       try {
@@ -693,25 +844,24 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   }, []);
 
   // Store listener
-  const [storeVersion, setStoreVersion] = useState<number>(0);
   useEffect(() => {
     const handleUpdate = () => {
       setStoreVersion((v) => v + 1);
       setGroupVersion((v) => v + 1);
       requestRenderRef.current();
     };
-    if (typeof store.subscribe === 'function') {
-      const unsubscribe = store.subscribe(handleUpdate);
+    if (typeof rawStore.subscribe === 'function') {
+      const unsubscribe = rawStore.subscribe(handleUpdate);
       return () => {
         unsubscribe?.();
       };
-    } else if (typeof store.on === 'function') {
-      store.on('loaded', handleUpdate);
+    } else if (typeof rawStore.on === 'function') {
+      rawStore.on('loaded', handleUpdate);
       return () => {
-        store.off?.('loaded', handleUpdate);
+        rawStore.off?.('loaded', handleUpdate);
       };
     }
-  }, [store]);
+  }, [rawStore]);
 
   // Persist columnFilters and sortRules changes per storageKey
   const hydratedStorageKeyRef = useRef<string | undefined>(storageKey);
@@ -738,8 +888,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       if (initialSort.length > 0) {
         store.setSorting(initialSort);
       }
-      if (initialGroups.length > 0) {
-        store.setGrouping(initialGroups);
+      if (initialGroups.length > 0 && rawStore.isRemote()) {
+        rawStore.setGrouping(initialGroups);
       }
       setStoreVersion((v) => v + 1);
       requestRender();
@@ -776,12 +926,12 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
     const compiled = compileColumnFilters(savedFilters);
     if (compiled) {
-      store.setFilter(compiled);
-    } else if ((store as any).hasActiveFilter?.()) {
-      store.setFilter(null);
+      rawStore.setFilter(compiled);
+    } else if ((rawStore as any).hasActiveFilter?.()) {
+      rawStore.setFilter(null);
     }
     if (savedSort.length > 0) {
-      store.setSorting(savedSort);
+      rawStore.setSorting(savedSort);
     }
 
     const timer = window.setTimeout(() => {
@@ -795,9 +945,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         scrollSaveTimerRef.current = null;
       }
     };
-  }, [storageKey, store]);
-
-  const requestRenderRef = useRef<() => void>(() => { });
+  }, [storageKey, rawStore]);
 
   // 5b. Selection Hook
   const {
@@ -900,14 +1048,14 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       return;
     }
     const safeFilename = typeof filename === 'string' && filename.trim() ? filename.trim() : undefined;
-    ExportEngine.exportAsCsv(geometryRef.current.columns, store, safeFilename);
-  }, [permissions.allowExport, onExport, store]);
+    ExportEngine.exportAsCsv(geometryRef.current.columns, rawStore, safeFilename);
+  }, [permissions.allowExport, onExport, rawStore]);
 
   const exportExcel = useCallback((filename?: string) => {
     if (permissions.allowExport === false) return;
     const safeFilename = typeof filename === 'string' && filename.trim() ? filename.trim() : undefined;
-    ExportEngine.exportAsExcel(geometryRef.current.columns, store, safeFilename);
-  }, [permissions.allowExport, store]);
+    ExportEngine.exportAsExcel(geometryRef.current.columns, rawStore, safeFilename);
+  }, [permissions.allowExport, rawStore]);
 
   // 6b. Expose Imperative GridApi
   const gridApi = useMemo<GridApi>(
@@ -961,8 +1109,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         }
       },
       applyTransaction: async (updates: any[], idField?: string) => {
-        const key = idField || (store as any).keyField || 'id';
-        await streamingEngineRef.current.applyTransaction(updates, key, store);
+        const key = idField || (rawStore as any).keyField || 'id';
+        await streamingEngineRef.current.applyTransaction(updates, key, rawStore);
         setStoreVersion((v) => v + 1);
         requestRender();
       },
@@ -1974,13 +2122,17 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       const nextGroups = exists
         ? prevGroups.filter((g) => g.selector !== colId)
         : [...prevGroups, { selector: colId }];
-      store.setGrouping(nextGroups);
+      setInternalGroupBy(nextGroups.map((g) => g.selector));
+      if (rawStore.isRemote()) {
+        rawStore.setGrouping(nextGroups);
+      }
       if (scrollContainerRef.current) {
         scrollContainerRef.current.scrollTop = 0;
       }
       scrollPosRef.current.top = 0;
       selectionRef.current.setActiveCell(0, 0);
       setSelectedCellUI({ row: 0, col: 0 });
+      setGroupVersion((v) => v + 1);
       setStoreVersion((v) => v + 1);
       requestRender();
 
@@ -2659,8 +2811,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         if (isGroup) {
           const gKey = (clickedVRow as any)?.groupKey || (clickedVRow as any)?.data?.groupKey;
           if (gKey) {
-            toggleGroupKey(gKey);
-            store.toggleGroup?.(gKey);
+            store.toggleGroup(gKey);
             setStoreVersion((v) => v + 1);
             requestRender();
             containerRef.current?.focus();
@@ -2732,8 +2883,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     if (isGroupHit) {
       const gKey = (vRow as any)?.groupKey || (vRow as any)?.data?.groupKey;
       if (gKey) {
-        toggleGroupKey(gKey);
-        store.toggleGroup?.(gKey);
+        store.toggleGroup(gKey);
         setStoreVersion((v) => v + 1);
         requestRender();
         return;
@@ -4153,7 +4303,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               viewportHeight={typeof window !== 'undefined' ? window.innerHeight : (gridSurfaceRef.current?.clientHeight || 800)}
               theme={resolvedTheme}
               locale={currentLocale}
-              store={store}
+              store={rawStore}
               activeFilter={columnFilters[headerFilterState.column.id]}
               baseFilter={activeBaseFilter}
               onApply={(filterState) => {
