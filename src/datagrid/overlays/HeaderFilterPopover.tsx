@@ -97,45 +97,45 @@ interface DateYearNode {
 
 type FlatDateTreeRow =
   | {
-      kind: 'blank';
-      key: string;
-      item: DistinctItem;
-    }
+    kind: 'blank';
+    key: string;
+    item: DistinctItem;
+  }
   | {
-      kind: 'year';
-      key: string;
-      year: number;
-      rawValues: any[];
-      count: number;
-      monthCount: number;
-      expanded: boolean;
-    }
+    kind: 'year';
+    key: string;
+    year: number;
+    rawValues: any[];
+    count: number;
+    monthCount: number;
+    expanded: boolean;
+  }
   | {
-      kind: 'month';
-      key: string;
-      monthKey: string;
-      year: number;
-      month: number;
-      rawValues: any[];
-      count: number;
-      dayCount: number;
-      expanded: boolean;
-    }
+    kind: 'month';
+    key: string;
+    monthKey: string;
+    year: number;
+    month: number;
+    rawValues: any[];
+    count: number;
+    dayCount: number;
+    expanded: boolean;
+  }
   | {
-      kind: 'day';
-      key: string;
-      year: number;
-      month: number;
-      day: number;
-      isoDate: string;
-      rawValues: any[];
-      count: number;
-    }
+    kind: 'day';
+    key: string;
+    year: number;
+    month: number;
+    day: number;
+    isoDate: string;
+    rawValues: any[];
+    count: number;
+  }
   | {
-      kind: 'other';
-      key: string;
-      item: DistinctItem;
-    };
+    kind: 'other';
+    key: string;
+    item: DistinctItem;
+  };
 
 /**
  * Compiles selected Year > Month > Day hierarchy nodes into a compact, server-friendly
@@ -434,10 +434,10 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   const defaultOp: FilterOperation = isDateCol
     ? 'between'
     : isNumericCol
-    ? '<'
-    : column.type === 'time' || column.type === 'boolean'
-    ? '='
-    : 'contains';
+      ? '<'
+      : column.type === 'time' || column.type === 'boolean'
+        ? '='
+        : 'contains';
 
   const [operator, setOperator] = useState<FilterOperation>(activeFilter?.operator || defaultOp);
   const [condVal1, setCondVal1] = useState<string>(() =>
@@ -577,12 +577,12 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
           }
           const blanks: DistinctItem[] = hasBlank
             ? [
-                {
-                  value: BLANK_FILTER_TOKEN,
-                  label: locale.emptyText || '(Blank)',
-                  count: hasExplicitBlankCount ? blankCountSum : undefined,
-                },
-              ]
+              {
+                value: BLANK_FILTER_TOKEN,
+                label: locale.emptyText || '(Blank)',
+                count: hasExplicitBlankCount ? blankCountSum : undefined,
+              },
+            ]
             : [];
           processedRes = [...blanks, ...nonBlanks];
         }
@@ -1267,15 +1267,15 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
       } else {
         const normalizedV1 = isNumericCol
           ? (() => {
-              const n = FilterEngine.parseNumeric(condVal1);
-              return isNaN(n) ? condVal1 : n;
-            })()
+            const n = FilterEngine.parseNumeric(condVal1);
+            return isNaN(n) ? condVal1 : n;
+          })()
           : condVal1;
         const normalizedV2 = isNumericCol
           ? (() => {
-              const n = FilterEngine.parseNumeric(condVal2);
-              return isNaN(n) ? condVal2 : n;
-            })()
+            const n = FilterEngine.parseNumeric(condVal2);
+            return isNaN(n) ? condVal2 : n;
+          })()
           : condVal2;
 
         onApply({
@@ -1419,17 +1419,17 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
         column.type === 'currency'
           ? column.currencySymbol || '$'
           : column.type === 'percent' || column.type === 'progress'
-          ? '%'
-          : column.type === 'rating'
-          ? '★'
-          : '';
+            ? '%'
+            : column.type === 'rating'
+              ? '★'
+              : '';
       const prefixSym =
         (column.type === 'currency' && !isTR) || (column.type === 'progress' && isTR) ? sym : '';
       const suffixSym =
         (column.type === 'currency' && isTR) ||
-        (column.type === 'progress' && !isTR) ||
-        column.type === 'percent' ||
-        column.type === 'rating'
+          (column.type === 'progress' && !isTR) ||
+          column.type === 'percent' ||
+          column.type === 'rating'
           ? sym
           : '';
 
@@ -1486,8 +1486,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                     ? '15.000,47'
                     : '15,000.47'
                   : column.type === 'progress' || column.type === 'percent'
-                  ? '20'
-                  : placeholder
+                    ? '20'
+                    : placeholder
               }
               style={{
                 flex: 1,
@@ -1777,8 +1777,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                 ? `Yıl > Ay > Gün (${selectedSet.size}/${allItems.length})`
                 : `Year > Month > Day (${selectedSet.size}/${allItems.length})`
               : isTR
-              ? `Değer Listesi (${selectedSet.size}/${allItems.length})`
-              : `Value List (${selectedSet.size}/${allItems.length})`}
+                ? `Değer Listesi (${selectedSet.size}/${allItems.length})`
+                : `Value List (${selectedSet.size}/${allItems.length})`}
           </span>
         </button>
         <button
@@ -1817,8 +1817,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                 ? 'Tarih Aralığı (Between)'
                 : 'Date Range (Between)'
               : isTR
-              ? 'Koşul Filtresi'
-              : 'Condition Rule'}
+                ? 'Koşul Filtresi'
+                : 'Condition Rule'}
           </span>
         </button>
       </div>
@@ -1887,9 +1887,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                     padding: '4px 6px',
                     backgroundColor: theme.dom.inputBg,
                     color: theme.dom.inputText,
-                    border: `1px solid ${
-                      condVal1 ? theme.dom.accentColor : theme.dom.inputBorder
-                    }`,
+                    border: `1px solid ${condVal1 ? theme.dom.accentColor : theme.dom.inputBorder
+                      }`,
                     borderRadius: 5,
                     outline: 'none',
                     fontSize: 11,
@@ -1909,9 +1908,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                     padding: '4px 6px',
                     backgroundColor: theme.dom.inputBg,
                     color: theme.dom.inputText,
-                    border: `1px solid ${
-                      condVal2 ? theme.dom.accentColor : theme.dom.inputBorder
-                    }`,
+                    border: `1px solid ${condVal2 ? theme.dom.accentColor : theme.dom.inputBorder
+                      }`,
                     borderRadius: 5,
                     outline: 'none',
                     fontSize: 11,
@@ -2027,7 +2025,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                 ref={(el) => {
                   if (el) el.indeterminate = isIndeterminate;
                 }}
-                onChange={() => {}}
+                onChange={() => { }}
                 style={{
                   cursor: 'pointer',
                   accentColor: theme.dom.accentColor,
@@ -2073,8 +2071,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                         ? 'Daralt'
                         : 'Collapse'
                       : isTR
-                      ? 'Tümünü Aç'
-                      : 'Expand All'}
+                        ? 'Tümünü Aç'
+                        : 'Expand All'}
                   </span>
                 </button>
               )}
@@ -2142,7 +2140,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
-                                  onChange={() => {}}
+                                  onChange={() => { }}
                                   style={{
                                     cursor: 'pointer',
                                     accentColor: theme.dom.accentColor,
@@ -2206,8 +2204,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                                         ? 'rgba(10, 132, 255, 0.22)'
                                         : 'rgba(0, 122, 255, 0.14)'
                                       : theme.isDark
-                                      ? 'rgba(255, 255, 255, 0.07)'
-                                      : 'rgba(0, 0, 0, 0.05)',
+                                        ? 'rgba(255, 255, 255, 0.07)'
+                                        : 'rgba(0, 0, 0, 0.05)',
                                     flexShrink: 0,
                                   }}
                                 >
@@ -2227,7 +2225,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                                     e.stopPropagation();
                                     toggleGroupValues(row.rawValues);
                                   }}
-                                  onChange={() => {}}
+                                  onChange={() => { }}
                                   style={{
                                     cursor: 'pointer',
                                     accentColor: theme.dom.accentColor,
@@ -2308,8 +2306,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                                         ? 'rgba(10, 132, 255, 0.18)'
                                         : 'rgba(0, 122, 255, 0.12)'
                                       : theme.isDark
-                                      ? 'rgba(255, 255, 255, 0.06)'
-                                      : 'rgba(0, 0, 0, 0.04)',
+                                        ? 'rgba(255, 255, 255, 0.06)'
+                                        : 'rgba(0, 0, 0, 0.04)',
                                     flexShrink: 0,
                                   }}
                                 >
@@ -2329,7 +2327,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                                     e.stopPropagation();
                                     toggleGroupValues(row.rawValues);
                                   }}
-                                  onChange={() => {}}
+                                  onChange={() => { }}
                                   style={{
                                     cursor: 'pointer',
                                     accentColor: theme.dom.accentColor,
@@ -2386,7 +2384,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                               <input
                                 type="checkbox"
                                 checked={isChecked}
-                                onChange={() => {}}
+                                onChange={() => { }}
                                 style={{
                                   cursor: 'pointer',
                                   accentColor: theme.dom.accentColor,
@@ -2440,9 +2438,9 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                       const isChecked = selectedSet.has(it.value);
                       const optMatch =
                         column.type === 'select' ||
-                        column.type === 'dropdown' ||
-                        column.type === 'lookup' ||
-                        column.type === 'multiselect'
+                          column.type === 'dropdown' ||
+                          column.type === 'lookup' ||
+                          column.type === 'multiselect'
                           ? column.options?.find((o) => o.value === it.value)
                           : undefined;
                       return (
@@ -2480,7 +2478,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              onChange={() => {}}
+                              onChange={() => { }}
                               style={{
                                 cursor: 'pointer',
                                 accentColor: theme.dom.accentColor,
@@ -2556,8 +2554,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                   ? 'Tarih Filtre Modu'
                   : 'Date Filter Mode'
                 : isTR
-                ? 'Operatör'
-                : 'Operator'}
+                  ? 'Operatör'
+                  : 'Operator'}
             </label>
             <select
               value={operator}
@@ -2637,15 +2635,15 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                     ? 'Başlangıç Tarihi (Yıl - Ay - Gün)'
                     : 'Start Date (YYYY-MM-DD)'
                   : isTR
-                  ? 'Başlangıç Değeri'
-                  : 'Minimum Value'
+                    ? 'Başlangıç Değeri'
+                    : 'Minimum Value'
                 : isDateCol
-                ? isTR
-                  ? 'Tarih (Yıl - Ay - Gün)'
-                  : 'Date (YYYY-MM-DD)'
-                : isTR
-                ? 'Değer'
-                : 'Value'}
+                  ? isTR
+                    ? 'Tarih (Yıl - Ay - Gün)'
+                    : 'Date (YYYY-MM-DD)'
+                  : isTR
+                    ? 'Değer'
+                    : 'Value'}
             </label>
             {renderStructuredConditionInput(
               condVal1,
@@ -2666,8 +2664,8 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                     ? 'Bitiş Tarihi (Yıl - Ay - Gün)'
                     : 'End Date (YYYY-MM-DD)'
                   : isTR
-                  ? 'Bitiş Değeri'
-                  : 'Maximum Value'}
+                    ? 'Bitiş Değeri'
+                    : 'Maximum Value'}
               </label>
               {renderStructuredConditionInput(
                 condVal2,
@@ -2690,21 +2688,21 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                 {[
                   ...(numericColumnStats.hasNegative
                     ? [
-                        {
-                          id: 'pos',
-                          label: isTR ? 'Pozitif (> 0)' : 'Positive (> 0)',
-                          op: '>' as FilterOperation,
-                          v1: '0',
-                          v2: '',
-                        },
-                        {
-                          id: 'neg',
-                          label: isTR ? 'Negatif (< 0)' : 'Negative (< 0)',
-                          op: '<' as FilterOperation,
-                          v1: '0',
-                          v2: '',
-                        },
-                      ]
+                      {
+                        id: 'pos',
+                        label: isTR ? 'Pozitif (> 0)' : 'Positive (> 0)',
+                        op: '>' as FilterOperation,
+                        v1: '0',
+                        v2: '',
+                      },
+                      {
+                        id: 'neg',
+                        label: isTR ? 'Negatif (< 0)' : 'Negative (< 0)',
+                        op: '<' as FilterOperation,
+                        v1: '0',
+                        v2: '',
+                      },
+                    ]
                     : []),
                   {
                     id: 'leAvg',
@@ -2774,13 +2772,13 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
                   { id: 'lastYear' as const, label: isTR ? 'Geçen Yıl' : 'Last Year' },
                   ...(dateHierarchy.minIsoDate && dateHierarchy.maxIsoDate
                     ? [
-                        {
-                          id: 'fullRange' as const,
-                          label: isTR
-                            ? `Tüm Veri (${FilterEngine.formatLocalizedDate(dateHierarchy.minIsoDate, locale.code)} → ${FilterEngine.formatLocalizedDate(dateHierarchy.maxIsoDate, locale.code)})`
-                            : `Full Data (${FilterEngine.formatLocalizedDate(dateHierarchy.minIsoDate, locale.code)} → ${FilterEngine.formatLocalizedDate(dateHierarchy.maxIsoDate, locale.code)})`,
-                        },
-                      ]
+                      {
+                        id: 'fullRange' as const,
+                        label: isTR
+                          ? `Tüm Veri (${FilterEngine.formatLocalizedDate(dateHierarchy.minIsoDate, locale.code)} → ${FilterEngine.formatLocalizedDate(dateHierarchy.maxIsoDate, locale.code)})`
+                          : `Full Data (${FilterEngine.formatLocalizedDate(dateHierarchy.minIsoDate, locale.code)} → ${FilterEngine.formatLocalizedDate(dateHierarchy.maxIsoDate, locale.code)})`,
+                      },
+                    ]
                     : []),
                 ].map((p) => (
                   <button

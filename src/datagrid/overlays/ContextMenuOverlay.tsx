@@ -256,8 +256,8 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
                   ? 'Sabitlemeyi Kaldır (Unpin)'
                   : 'Unpin Column'
                 : isTR
-                ? 'Sola Sabitle (Pin Left)'
-                : 'Pin Column Left',
+                  ? 'Sola Sabitle (Pin Left)'
+                  : 'Pin Column Left',
               undefined,
               onTogglePinColumn
             )}
@@ -345,8 +345,8 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
                   ? 'Sabitlemeyi Kaldır (Unpin)'
                   : 'Unpin Column'
                 : isTR
-                ? 'Sola Sabitle (Pin Left)'
-                : 'Pin Column Left',
+                  ? 'Sola Sabitle (Pin Left)'
+                  : 'Pin Column Left',
               undefined,
               onTogglePinColumn
             )}
@@ -357,8 +357,8 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
                   ? 'Grubu Kaldır'
                   : 'Ungroup Column'
                 : isTR
-                ? 'Bu Sütuna Göre Grupla'
-                : 'Group by This Column',
+                  ? 'Bu Sütuna Göre Grupla'
+                  : 'Group by This Column',
               undefined,
               onToggleGroupColumn
             )}
@@ -369,8 +369,8 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
                   ? 'Yazma İznini Aç (Write Mode)'
                   : 'Set Column Editable (Write)'
                 : isTR
-                ? 'Salt Okunur Yap (Read-Only)'
-                : 'Set Column Read-Only',
+                  ? 'Salt Okunur Yap (Read-Only)'
+                  : 'Set Column Read-Only',
               undefined,
               onToggleColumnReadonly
             )}
@@ -415,9 +415,8 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
                       fontWeight: isActive ? 700 : 500,
                       textTransform: 'uppercase',
                       borderRadius: 4,
-                      border: `1px solid ${
-                        isActive ? theme.dom.accentColor : theme.dom.popoverBorder
-                      }`,
+                      border: `1px solid ${isActive ? theme.dom.accentColor : theme.dom.popoverBorder
+                        }`,
                       backgroundColor: isActive ? theme.dom.accentColor : 'transparent',
                       color: isActive ? '#FFFFFF' : theme.dom.popoverText,
                       cursor: 'pointer',
@@ -559,8 +558,8 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
                 ? 'Sütun Grubunu Kaldır'
                 : 'Ungroup Column'
               : isTR
-              ? 'Bu Sütuna Göre Grupla'
-              : 'Group by This Column',
+                ? 'Bu Sütuna Göre Grupla'
+                : 'Group by This Column',
             undefined,
             onToggleGroupColumn,
             !menu.column

@@ -500,7 +500,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             parsed.scrollTop = Math.round(pos.top);
             parsed.scrollLeft = Math.round(pos.left);
             localStorage.setItem(`sheetgl_state_v1_${storageKey}`, JSON.stringify(parsed));
-          } catch {}
+          } catch { }
         }, 30);
       }
     },
@@ -517,7 +517,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed.sortRules)) return parsed.sortRules;
         }
-      } catch {}
+      } catch { }
     }
     return initialSort;
   });
@@ -532,7 +532,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             return parsed.columnFilters;
           }
         }
-      } catch {}
+      } catch { }
     }
     return {};
   });
@@ -625,7 +625,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       parsed.columnFilters = columnFilters;
       parsed.sortRules = sortRules;
       localStorage.setItem(`sheetgl_state_v1_${storageKey}`, JSON.stringify(parsed));
-    } catch {}
+    } catch { }
   }, [storageKey, columnFilters, sortRules]);
 
   // Restore per-module state (filters, sorting, scroll position) when storageKey or store changes
@@ -670,7 +670,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           savedLeft = parsed.scrollLeft;
         }
       }
-    } catch {}
+    } catch { }
 
     setColumnFilters(savedFilters);
     setSortRules(savedSort);
@@ -699,7 +699,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     };
   }, [storageKey, store]);
 
-  const requestRenderRef = useRef<() => void>(() => {});
+  const requestRenderRef = useRef<() => void>(() => { });
 
   // 5b. Selection Hook
   const {
@@ -790,7 +790,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   ]);
 
   requestRenderRef.current = requestRender;
-  const openEditorRef = useRef<(row: number, col: number, initialChar?: string) => void>(() => {});
+  const openEditorRef = useRef<(row: number, col: number, initialChar?: string) => void>(() => { });
 
   // ============================================================================
   // CSV & EXCEL EXPORT ENGINE
@@ -836,7 +836,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         if (storageKey) {
           try {
             localStorage.removeItem(`sheetgl_state_v1_${storageKey}`);
-          } catch {}
+          } catch { }
         }
         resetColumnOrder();
         setSortRules(initialSort);
@@ -1274,8 +1274,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           rejectedCount === 1
             ? `⛔ ${firstErrorMsg}`
             : isTR
-            ? `⛔ ${rejectedCount} hücre doğrulama kuralına uymadığı için engellendi (${firstErrorMsg})`
-            : `⛔ ${rejectedCount} cells blocked by validation rule (${firstErrorMsg})`,
+              ? `⛔ ${rejectedCount} hücre doğrulama kuralına uymadığı için engellendi (${firstErrorMsg})`
+              : `⛔ ${rejectedCount} cells blocked by validation rule (${firstErrorMsg})`,
           'warning'
         );
       }
@@ -1893,8 +1893,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             ? `📂 "${colTitle}" gruplaması kaldırıldı.`
             : `📂 Ungrouped "${colTitle}".`
           : currentLocale.code.startsWith('tr')
-          ? `📁 "${colTitle}" sütununa göre gruplandı. Satırları görmek için gruba tıklayın.`
-          : `📁 Grouped by "${colTitle}". Click any group row to expand.`,
+            ? `📁 "${colTitle}" sütununa göre gruplandı. Satırları görmek için gruba tıklayın.`
+            : `📁 Grouped by "${colTitle}". Click any group row to expand.`,
         'info'
       );
       return nextGroups;
@@ -2028,9 +2028,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         setFillDragState((prev) =>
           prev
             ? {
-                ...prev,
-                targetRange: { minRow, maxRow, minCol, maxCol },
-              }
+              ...prev,
+              targetRange: { minRow, maxRow, minCol, maxCol },
+            }
             : null
         );
       }
@@ -2214,16 +2214,16 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       setColumnDragState((prev) =>
         prev
           ? {
-              ...prev,
-              isDragging: true,
-              currentX: Math.max(8, Math.min(rect.width - 140, x)),
-              currentY: Math.max(4, Math.min(geom.headerHeight + 24, y)),
-              targetColIndex: bestColIdx,
-              targetColId: targetCol.id,
-              targetColTitle: targetCol.title || targetCol.id,
-              insertAfter,
-              dropIndicatorX: indicatorX,
-            }
+            ...prev,
+            isDragging: true,
+            currentX: Math.max(8, Math.min(rect.width - 140, x)),
+            currentY: Math.max(4, Math.min(geom.headerHeight + 24, y)),
+            targetColIndex: bestColIdx,
+            targetColId: targetCol.id,
+            targetColTitle: targetCol.title || targetCol.id,
+            insertAfter,
+            dropIndicatorX: indicatorX,
+          }
           : null
       );
     };
@@ -3000,8 +3000,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           colDef.type === 'progress' || colDef.type === 'rating'
             ? 0
             : colDef.type === 'boolean'
-            ? false
-            : '';
+              ? false
+              : '';
         updates.push({
           rowIndex: r,
           rowKey: vRow.data[keyField] ?? vRow.data.id ?? r,
@@ -3151,7 +3151,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       internalClipboardRef.current = tsv;
       let copied = false;
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(tsv).catch(() => {});
+        navigator.clipboard.writeText(tsv).catch(() => { });
         copied = true;
       }
       try {
@@ -3235,9 +3235,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       const targetEl = e.target as HTMLElement | null;
       const isInputFocused = Boolean(
         targetEl &&
-          (targetEl.tagName === 'INPUT' ||
-            targetEl.tagName === 'TEXTAREA' ||
-            targetEl.isContentEditable)
+        (targetEl.tagName === 'INPUT' ||
+          targetEl.tagName === 'TEXTAREA' ||
+          targetEl.isContentEditable)
       );
       if ((k === 'c' || e.code === 'KeyC') && !isInputFocused) {
         const domSelection = typeof window !== 'undefined' ? window.getSelection()?.toString() : '';
@@ -3480,9 +3480,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       : '';
   const isActiveCellEditable = Boolean(
     activeViewRow &&
-      activeViewRow.type === 'data' &&
-      currentColumn &&
-      canEditCell(activeViewRow.data, currentColumn, selectedCellUI.row, true)
+    activeViewRow.type === 'data' &&
+    currentColumn &&
+    canEditCell(activeViewRow.data, currentColumn, selectedCellUI.row, true)
   );
 
   const pendingChanges = showBatchModal ? store.getPendingChanges?.() : undefined;
@@ -3490,8 +3490,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     store.getPendingChangesCount !== undefined
       ? store.getPendingChangesCount()
       : (pendingChanges?.inserted?.length || 0) +
-        (pendingChanges?.updated?.length || 0) +
-        (pendingChanges?.deleted?.length || 0);
+      (pendingChanges?.updated?.length || 0) +
+      (pendingChanges?.deleted?.length || 0);
 
   const normRange = selectionRef.current.getNormalizedRange();
   const selectionSpan = {
@@ -3784,10 +3784,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
                 Math.min(
                   (gridSurfaceRef.current?.clientHeight || 400) - 44,
                   geometryRef.current.headerHeight +
-                    ((scrollIndicator.row / Math.max(1, store.getRowCount())) *
-                      ((gridSurfaceRef.current?.clientHeight || 400) -
-                        geometryRef.current.headerHeight -
-                        44))
+                  ((scrollIndicator.row / Math.max(1, store.getRowCount())) *
+                    ((gridSurfaceRef.current?.clientHeight || 400) -
+                      geometryRef.current.headerHeight -
+                      44))
                 )
               ),
               zIndex: 90,
@@ -3880,8 +3880,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
                 toastMessage.type === 'warning'
                   ? 'rgba(255, 159, 10, 0.95)'
                   : toastMessage.type === 'success'
-                  ? 'rgba(48, 209, 88, 0.95)'
-                  : resolvedTheme.dom.popoverBg,
+                    ? 'rgba(48, 209, 88, 0.95)'
+                    : resolvedTheme.dom.popoverBg,
               color:
                 toastMessage.type === 'warning' || toastMessage.type === 'success'
                   ? '#FFFFFF'
@@ -3998,10 +3998,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
                 setActiveOverlay((prev) =>
                   prev
                     ? {
-                        ...prev,
-                        initialValue: newVal,
-                        initialChar: undefined,
-                      }
+                      ...prev,
+                      initialValue: newVal,
+                      initialChar: undefined,
+                    }
                     : null
                 );
               }
@@ -4020,11 +4020,11 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           const surfaceRect = gridSurfaceRef.current?.getBoundingClientRect();
           const popoverAnchor = surfaceRect
             ? {
-                x: surfaceRect.left + headerFilterState.rect.x,
-                y: surfaceRect.top + headerFilterState.rect.y,
-                width: headerFilterState.rect.width,
-                height: headerFilterState.rect.height,
-              }
+              x: surfaceRect.left + headerFilterState.rect.x,
+              y: surfaceRect.top + headerFilterState.rect.y,
+              width: headerFilterState.rect.width,
+              height: headerFilterState.rect.height,
+            }
             : headerFilterState.rect;
 
           return (
@@ -4062,10 +4062,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
           const surfaceRect = gridSurfaceRef.current?.getBoundingClientRect();
           const clientMenu: ContextMenuState = surfaceRect
             ? {
-                ...contextMenu,
-                x: surfaceRect.left + contextMenu.x,
-                y: surfaceRect.top + contextMenu.y,
-              }
+              ...contextMenu,
+              x: surfaceRect.left + contextMenu.x,
+              y: surfaceRect.top + contextMenu.y,
+            }
             : contextMenu;
 
           return (
@@ -4073,178 +4073,178 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               menu={clientMenu}
               viewportWidth={typeof window !== 'undefined' ? window.innerWidth : (gridSurfaceRef.current?.clientWidth || 1000)}
               viewportHeight={typeof window !== 'undefined' ? window.innerHeight : (gridSurfaceRef.current?.clientHeight || 800)}
-            theme={resolvedTheme}
-            locale={currentLocale}
-            permissions={permissions}
-            isCellEditable={
-              contextMenu.rowData && contextMenu.column
-                ? canEditCell(contextMenu.rowData, contextMenu.column, contextMenu.row, true)
-                : false
-            }
-            isGroupedByCol={
-              contextMenu.column
-                ? groups.some((g) => g.selector === contextMenu.column!.id)
-                : false
-            }
-            currentSummaryType={
-              contextMenu.column
-                ? store.getSummaryTypes?.()[contextMenu.column.id] || 'none'
-                : 'none'
-            }
-            onCopy={() => {
-              const tsv = buildSelectedTsv();
-              internalClipboardRef.current = tsv;
-              navigator.clipboard?.writeText(tsv).catch(() => {});
-              showToast(
-                currentLocale.code.startsWith('tr')
-                  ? '📋 Kopyalandı (TSV)'
-                  : '📋 Copied to clipboard (TSV)',
-                'info'
-              );
-            }}
-            onPaste={() => {
-              if (navigator.clipboard?.readText) {
-                navigator.clipboard
-                  .readText()
-                  .then((txt) => applyPastedTsv(txt || internalClipboardRef.current))
-                  .catch(() => applyPastedTsv(internalClipboardRef.current));
-              } else {
-                applyPastedTsv(internalClipboardRef.current);
+              theme={resolvedTheme}
+              locale={currentLocale}
+              permissions={permissions}
+              isCellEditable={
+                contextMenu.rowData && contextMenu.column
+                  ? canEditCell(contextMenu.rowData, contextMenu.column, contextMenu.row, true)
+                  : false
               }
-            }}
-            onDuplicateCellDown={handleDuplicateCellDown}
-            onDuplicateCellRight={handleDuplicateCellRight}
-            onDuplicateRow={() => handleDuplicateRow(contextMenu.row)}
-            onInsertRowAbove={() => handleInsertRow(Math.max(0, contextMenu.row))}
-            onInsertRowBelow={() => handleInsertRow(contextMenu.row + 1)}
-            onClearCells={handleClearSelectedCells}
-            onDeleteRow={() => handleDeleteRow(contextMenu.row)}
-            activeAttachmentFilter={(() => {
-              if (!contextMenu.column) return 'all';
-              const cf = columnFilters[contextMenu.column.id];
-              if (!cf) return 'all';
-              if (cf.selectedValues?.includes(WITH_FILE_FILTER_TOKEN) && !cf.selectedValues?.includes(WITHOUT_FILE_FILTER_TOKEN)) return 'with_file';
-              if ((cf.selectedValues?.includes(WITHOUT_FILE_FILTER_TOKEN) || cf.selectedValues?.includes(BLANK_FILTER_TOKEN)) && !cf.selectedValues?.includes(WITH_FILE_FILTER_TOKEN)) return 'without_file';
-              if (cf.operator === '<>') return 'with_file';
-              if (cf.operator === '=') return 'without_file';
-              return 'all';
-            })()}
-            onFilterAttachment={(mode) => {
-              if (!contextMenu.column) return;
-              if (mode === 'all') {
-                handleApplyColumnFilter(contextMenu.column.id, null);
-              } else if (mode === 'with_file') {
-                handleApplyColumnFilter(contextMenu.column.id, {
-                  columnId: contextMenu.column.id,
-                  mode: 'values',
-                  selectedValues: [WITH_FILE_FILTER_TOKEN],
-                  semanticFilter: [contextMenu.column.id, '<>', BLANK_FILTER_TOKEN],
-                });
-              } else if (mode === 'without_file') {
-                handleApplyColumnFilter(contextMenu.column.id, {
-                  columnId: contextMenu.column.id,
-                  mode: 'values',
-                  selectedValues: [WITHOUT_FILE_FILTER_TOKEN],
-                  semanticFilter: [contextMenu.column.id, '=', BLANK_FILTER_TOKEN],
-                });
+              isGroupedByCol={
+                contextMenu.column
+                  ? groups.some((g) => g.selector === contextMenu.column!.id)
+                  : false
               }
-            }}
-            onFilterByCellValue={() => {
-              if (contextMenu.column) {
-                const vRow = store.getViewRow(contextMenu.row);
-                const rowObj =
-                  contextMenu.rowData || (vRow && vRow.type === 'data' ? vRow.data : null);
-                if (rowObj) {
-                  const rawVal = rowObj[contextMenu.column.id];
-                  const isBlank = rawVal === null || rawVal === undefined || String(rawVal).trim() === '';
-                  const isPdf = contextMenu.column.type === 'pdf' || contextMenu.column.type === 'file';
-                  if (isPdf) {
-                    handleApplyColumnFilter(contextMenu.column.id, {
-                      columnId: contextMenu.column.id,
-                      mode: 'values',
-                      selectedValues: [isBlank ? WITHOUT_FILE_FILTER_TOKEN : WITH_FILE_FILTER_TOKEN],
-                      semanticFilter: [contextMenu.column.id, isBlank ? '=' : '<>', BLANK_FILTER_TOKEN],
-                    });
-                  } else {
-                    const filterVal = isBlank ? '__SHEETGL_BLANK__' : String(rawVal);
-                    handleApplyColumnFilter(contextMenu.column.id, {
-                      columnId: contextMenu.column.id,
-                      mode: 'values',
-                      selectedValues: [filterVal],
-                    });
+              currentSummaryType={
+                contextMenu.column
+                  ? store.getSummaryTypes?.()[contextMenu.column.id] || 'none'
+                  : 'none'
+              }
+              onCopy={() => {
+                const tsv = buildSelectedTsv();
+                internalClipboardRef.current = tsv;
+                navigator.clipboard?.writeText(tsv).catch(() => { });
+                showToast(
+                  currentLocale.code.startsWith('tr')
+                    ? '📋 Kopyalandı (TSV)'
+                    : '📋 Copied to clipboard (TSV)',
+                  'info'
+                );
+              }}
+              onPaste={() => {
+                if (navigator.clipboard?.readText) {
+                  navigator.clipboard
+                    .readText()
+                    .then((txt) => applyPastedTsv(txt || internalClipboardRef.current))
+                    .catch(() => applyPastedTsv(internalClipboardRef.current));
+                } else {
+                  applyPastedTsv(internalClipboardRef.current);
+                }
+              }}
+              onDuplicateCellDown={handleDuplicateCellDown}
+              onDuplicateCellRight={handleDuplicateCellRight}
+              onDuplicateRow={() => handleDuplicateRow(contextMenu.row)}
+              onInsertRowAbove={() => handleInsertRow(Math.max(0, contextMenu.row))}
+              onInsertRowBelow={() => handleInsertRow(contextMenu.row + 1)}
+              onClearCells={handleClearSelectedCells}
+              onDeleteRow={() => handleDeleteRow(contextMenu.row)}
+              activeAttachmentFilter={(() => {
+                if (!contextMenu.column) return 'all';
+                const cf = columnFilters[contextMenu.column.id];
+                if (!cf) return 'all';
+                if (cf.selectedValues?.includes(WITH_FILE_FILTER_TOKEN) && !cf.selectedValues?.includes(WITHOUT_FILE_FILTER_TOKEN)) return 'with_file';
+                if ((cf.selectedValues?.includes(WITHOUT_FILE_FILTER_TOKEN) || cf.selectedValues?.includes(BLANK_FILTER_TOKEN)) && !cf.selectedValues?.includes(WITH_FILE_FILTER_TOKEN)) return 'without_file';
+                if (cf.operator === '<>') return 'with_file';
+                if (cf.operator === '=') return 'without_file';
+                return 'all';
+              })()}
+              onFilterAttachment={(mode) => {
+                if (!contextMenu.column) return;
+                if (mode === 'all') {
+                  handleApplyColumnFilter(contextMenu.column.id, null);
+                } else if (mode === 'with_file') {
+                  handleApplyColumnFilter(contextMenu.column.id, {
+                    columnId: contextMenu.column.id,
+                    mode: 'values',
+                    selectedValues: [WITH_FILE_FILTER_TOKEN],
+                    semanticFilter: [contextMenu.column.id, '<>', BLANK_FILTER_TOKEN],
+                  });
+                } else if (mode === 'without_file') {
+                  handleApplyColumnFilter(contextMenu.column.id, {
+                    columnId: contextMenu.column.id,
+                    mode: 'values',
+                    selectedValues: [WITHOUT_FILE_FILTER_TOKEN],
+                    semanticFilter: [contextMenu.column.id, '=', BLANK_FILTER_TOKEN],
+                  });
+                }
+              }}
+              onFilterByCellValue={() => {
+                if (contextMenu.column) {
+                  const vRow = store.getViewRow(contextMenu.row);
+                  const rowObj =
+                    contextMenu.rowData || (vRow && vRow.type === 'data' ? vRow.data : null);
+                  if (rowObj) {
+                    const rawVal = rowObj[contextMenu.column.id];
+                    const isBlank = rawVal === null || rawVal === undefined || String(rawVal).trim() === '';
+                    const isPdf = contextMenu.column.type === 'pdf' || contextMenu.column.type === 'file';
+                    if (isPdf) {
+                      handleApplyColumnFilter(contextMenu.column.id, {
+                        columnId: contextMenu.column.id,
+                        mode: 'values',
+                        selectedValues: [isBlank ? WITHOUT_FILE_FILTER_TOKEN : WITH_FILE_FILTER_TOKEN],
+                        semanticFilter: [contextMenu.column.id, isBlank ? '=' : '<>', BLANK_FILTER_TOKEN],
+                      });
+                    } else {
+                      const filterVal = isBlank ? '__SHEETGL_BLANK__' : String(rawVal);
+                      handleApplyColumnFilter(contextMenu.column.id, {
+                        columnId: contextMenu.column.id,
+                        mode: 'values',
+                        selectedValues: [filterVal],
+                      });
+                    }
                   }
                 }
-              }
-            }}
-            onToggleGroupColumn={() => {
-              if (contextMenu.column) {
-                handleToggleGroupColumn(contextMenu.column.id);
-              }
-            }}
-            onSortColumn={(desc) => {
-              handleHeaderSort(contextMenu.col, false, desc);
-            }}
-            onTogglePinColumn={() => {
-              if (contextMenu.column) {
-                handleUpdateColumnDef(contextMenu.column.id, {
-                  pinned: contextMenu.column.pinned ? false : 'left',
-                });
-              }
-            }}
-            onToggleColumnReadonly={() => {
-              if (contextMenu.column) {
-                const nextRO = !contextMenu.column.readonly;
-                handleUpdateColumnDef(contextMenu.column.id, {
-                  readonly: nextRO,
-                  permission: nextRO ? 'readonly' : 'write',
-                });
-              }
-            }}
-            onChangeSummaryType={(sType) => {
-              if (contextMenu.column) {
-                handleChangeSummaryType(contextMenu.column.id, sType);
-              }
-            }}
-            onOpenSparklineModal={() => {
-              if (contextMenu.column?.type === 'sparkline' && contextMenu.rowData) {
-                setSparklineModal({
-                  rowIndex: contextMenu.row,
-                  rowData: contextMenu.rowData,
-                  column: contextMenu.column,
-                  points: Array.isArray(contextMenu.rowData[contextMenu.column.id])
-                    ? contextMenu.rowData[contextMenu.column.id]
-                    : [],
-                });
-              }
-            }}
-            onExportExcel={exportExcel}
-            onExportCsv={exportCsv}
-            onViewRowDetail={
-              onViewRowDetail
-                ? () => {
+              }}
+              onToggleGroupColumn={() => {
+                if (contextMenu.column) {
+                  handleToggleGroupColumn(contextMenu.column.id);
+                }
+              }}
+              onSortColumn={(desc) => {
+                handleHeaderSort(contextMenu.col, false, desc);
+              }}
+              onTogglePinColumn={() => {
+                if (contextMenu.column) {
+                  handleUpdateColumnDef(contextMenu.column.id, {
+                    pinned: contextMenu.column.pinned ? false : 'left',
+                  });
+                }
+              }}
+              onToggleColumnReadonly={() => {
+                if (contextMenu.column) {
+                  const nextRO = !contextMenu.column.readonly;
+                  handleUpdateColumnDef(contextMenu.column.id, {
+                    readonly: nextRO,
+                    permission: nextRO ? 'readonly' : 'write',
+                  });
+                }
+              }}
+              onChangeSummaryType={(sType) => {
+                if (contextMenu.column) {
+                  handleChangeSummaryType(contextMenu.column.id, sType);
+                }
+              }}
+              onOpenSparklineModal={() => {
+                if (contextMenu.column?.type === 'sparkline' && contextMenu.rowData) {
+                  setSparklineModal({
+                    rowIndex: contextMenu.row,
+                    rowData: contextMenu.rowData,
+                    column: contextMenu.column,
+                    points: Array.isArray(contextMenu.rowData[contextMenu.column.id])
+                      ? contextMenu.rowData[contextMenu.column.id]
+                      : [],
+                  });
+                }
+              }}
+              onExportExcel={exportExcel}
+              onExportCsv={exportCsv}
+              onViewRowDetail={
+                onViewRowDetail
+                  ? () => {
                     const vRow = store.getViewRow(contextMenu.row);
                     const rData =
                       contextMenu.rowData || (vRow && vRow.type === 'data' ? vRow.data : {});
                     onViewRowDetail(contextMenu.row, rData);
                   }
-                : undefined
-            }
-            onClose={() => setContextMenu(null)}
-          />
-        );
-      })()}
+                  : undefined
+              }
+              onClose={() => setContextMenu(null)}
+            />
+          );
+        })()}
 
         {/* 6b. DETAILED SPARKLINE TREND CHART MODAL DIALOG */}
         {pdfModal && (
-        <PdfPreviewModalOverlay
-          modal={pdfModal}
-          theme={resolvedTheme}
-          locale={currentLocale}
-          onClose={() => setPdfModal(null)}
-        />
-      )}
+          <PdfPreviewModalOverlay
+            modal={pdfModal}
+            theme={resolvedTheme}
+            locale={currentLocale}
+            onClose={() => setPdfModal(null)}
+          />
+        )}
 
-      {sparklineModal && (
+        {sparklineModal && (
           <SparklineModalOverlay
             modal={sparklineModal}
             theme={resolvedTheme}
