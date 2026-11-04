@@ -481,24 +481,19 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   const [expandedMasterRows, setExpandedMasterRows] = useState<Set<any>>(new Set());
 
   const toggleMasterRow = useCallback(
-    (rowKey: any, rowIndex: number) => {
+    (rowKey: any, _rowIndex?: number) => {
       setExpandedMasterRows((prev) => {
         const next = new Set(prev);
-        const geom = geometryRef.current;
-        const expHeight = geom.rowHeight + (detailRowHeight || 160);
-
         if (next.has(rowKey)) {
           next.delete(rowKey);
-          geom.setRowHeight(rowIndex, geom.rowHeight);
         } else {
           next.add(rowKey);
-          geom.setRowHeight(rowIndex, expHeight);
         }
         return next;
       });
       requestRenderRef.current();
     },
-    [detailRowHeight]
+    []
   );
 
   // 4b. Geometry & Layout Hook
@@ -568,6 +563,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       }
     },
   });
+
 
   const scrollSaveTimerRef = useRef<number | null>(null);
   const historyRef = useRef<HistoryManager>(new HistoryManager(100));
@@ -687,6 +683,29 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       };
     }
   }, [store]);
+
+  // Master-Detail Dynamic Row Heights Synchronization (Fixes index drift on sort/filter/search)
+  useEffect(() => {
+    const geom = geometryRef.current;
+    geom.clearCustomRowHeights();
+    if (!masterDetailTemplate || expandedMasterRows.size === 0) {
+      requestRenderRef.current();
+      return;
+    }
+    const rowCount = store.getRowCount();
+    const idField = (store as any).getKeyField?.() || (store as any).keyField || 'id';
+    const expHeight = geom.rowHeight + (detailRowHeight || 160);
+
+    for (let i = 0; i < rowCount; i++) {
+      const vRow = store.getViewRow(i);
+      if (!vRow || vRow.type !== 'data') continue;
+      const key = vRow.data?.[idField] ?? vRow.data?.uuid ?? vRow.data?.id ?? vRow.data?.legacy_id ?? i;
+      if (key !== undefined && expandedMasterRows.has(key)) {
+        geom.setRowHeight(i, expHeight);
+      }
+    }
+    requestRenderRef.current();
+  }, [storeVersion, expandedMasterRows, store, detailRowHeight, masterDetailTemplate, sortRules, columnFilters, searchKeyword]);
 
   // Persist columnFilters and sortRules changes per storageKey
   const hydratedStorageKeyRef = useRef<string | undefined>(storageKey);
@@ -2423,7 +2442,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       if (isSpecialInteractive && !hasCustomEditor && !hasPluginEditor) return;
 
       const screenRect = geom.getColumnScreenRect(col, scrollPosRef.current.left);
-      const y = geom.headerHeight + row * geom.rowHeight - scrollPosRef.current.top;
+      const rowRect = geom.getRowScreenRect(row, scrollPosRef.current.top);
+      const y = rowRect.y;
 
       setEditorValidationError(null);
       setIsEditorValidating(false);
@@ -2433,7 +2453,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         x: screenRect.x,
         y,
         width: screenRect.width,
-        height: geom.rowHeight,
+        height: rowRect.height,
         column: colDef,
         initialValue: vRow.data[colDef.id],
         initialChar,
@@ -2495,7 +2515,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     }
 
     // 2b. Check Group Row Hover (Across entire row width including left chevron)
-    const hoveredRowIdx = Math.floor((y - geom.headerHeight + st) / geom.rowHeight);
+    const hoveredRowIdx = geom.findRowIndexAtY(y - geom.headerHeight + st);
     if (hoveredRowIdx >= 0 && hoveredRowIdx < store.getRowCount()) {
       const hVRow = store.getViewRow(hoveredRowIdx);
       if (hVRow && hVRow.type === 'group') {
@@ -2674,7 +2694,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
     // C2. Group Row Click (Works anywhere across the group row, including the left ▶/▼ chevron!)
     if (y > geom.headerHeight) {
-      const clickedRowIdx = Math.floor((y - geom.headerHeight + st) / geom.rowHeight);
+      const clickedRowIdx = geom.findRowIndexAtY(y - geom.headerHeight + st);
       if (clickedRowIdx >= 0 && clickedRowIdx < rowCount) {
         const clickedVRow = store.getViewRow(clickedRowIdx);
         if (clickedVRow && clickedVRow.type === 'group') {
@@ -2929,7 +2949,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
 
     // 1b. Group Row Right-Click
     if (y > geom.headerHeight) {
-      const clickedRowIdx = Math.floor((y - geom.headerHeight + st) / geom.rowHeight);
+      const clickedRowIdx = geom.findRowIndexAtY(y - geom.headerHeight + st);
       if (clickedRowIdx >= 0 && clickedRowIdx < rowCount) {
         const gRow = store.getViewRow(clickedRowIdx);
         if (gRow && gRow.type === 'group') {
