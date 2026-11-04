@@ -97,8 +97,7 @@ echo.
 
 REM 5. Git Commit, Tag ve Push
 echo [5/6] Git commit, etiket [v%NEW_VER%] ve origin push islemi yapiliyor...
-git add package.json README.md
-if exist package-lock.json git add package-lock.json
+git add -A
 git diff --cached --quiet
 if errorlevel 1 git commit -m "chore: release v%NEW_VER%"
 git tag -f "v%NEW_VER%"

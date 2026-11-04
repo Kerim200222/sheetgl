@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ColumnDef } from '../types/grid';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
@@ -17,6 +18,7 @@ export interface HeaderFilterPopoverProps {
   column: ColumnDef;
   anchorRect: { x: number; y: number; width: number; height: number };
   viewportWidth?: number;
+  viewportHeight?: number;
   theme: IGridThemeTokens;
   locale: IGridLocale;
   store: IDataStore;
@@ -394,6 +396,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   column,
   anchorRect,
   viewportWidth = 1000,
+  viewportHeight = 800,
   theme,
   locale,
   store,
@@ -667,15 +670,27 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
     }
   }, [tab]);
 
-  // Outside click listener
+  // Outside click & window scroll/resize listener
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
         onClose();
       }
     };
+    const handleScroll = (e: Event) => {
+      if (popoverRef.current && popoverRef.current.contains(e.target as Node)) {
+        return;
+      }
+      onClose();
+    };
     document.addEventListener('mousedown', handleOutside, true);
-    return () => document.removeEventListener('mousedown', handleOutside, true);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', onClose);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside, true);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', onClose);
+    };
   }, [onClose]);
 
   const formatItemLabel = useCallback(
@@ -1546,12 +1561,30 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
     );
   };
 
-  // Compute safe horizontal position inside viewport
-  const popoverWidth = isDateCol ? Math.min(336, Math.max(295, viewportWidth - 20)) : 295;
-  const rawLeft = anchorRect.x + anchorRect.width - popoverWidth;
-  const safeLeft = Math.max(8, Math.min(rawLeft, viewportWidth - popoverWidth - 16));
+  // Viewport dimensions & safe coordinate calculations
+  const winWidth = viewportWidth || (typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const winHeight = viewportHeight || (typeof window !== 'undefined' ? window.innerHeight : 800);
 
-  return (
+  const popoverWidth = isDateCol ? Math.min(340, Math.max(295, winWidth - 24)) : 295;
+  const rawLeft = anchorRect.x + anchorRect.width - popoverWidth;
+  const safeLeft = Math.max(8, Math.min(rawLeft, winWidth - popoverWidth - 12));
+
+  const anchorBottom = anchorRect.y + anchorRect.height;
+  const spaceBelow = winHeight - anchorBottom - 16;
+  const spaceAbove = anchorRect.y - 16;
+
+  let safeTop: number;
+  let maxHeight: number;
+
+  if (spaceBelow >= 320 || spaceBelow >= spaceAbove) {
+    safeTop = Math.max(8, anchorBottom + 4);
+    maxHeight = Math.min(580, Math.max(260, spaceBelow));
+  } else {
+    maxHeight = Math.min(580, Math.max(260, spaceAbove));
+    safeTop = Math.max(8, anchorRect.y - maxHeight - 4);
+  }
+
+  const popoverNode = (
     <div
       ref={popoverRef}
       onMouseDown={(e) => e.stopPropagation()}
@@ -1563,16 +1596,19 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
         if (e.key === 'Enter') handleApply();
       }}
       style={{
-        position: 'absolute',
+        position: 'fixed',
         left: safeLeft,
-        top: anchorRect.y + anchorRect.height + 4,
+        top: safeTop,
         width: popoverWidth,
-        zIndex: 150,
+        maxHeight,
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 99999,
         backgroundColor: theme.dom.popoverBg,
         color: theme.dom.popoverText,
         border: `1px solid ${theme.dom.popoverBorder}`,
         borderRadius: 10,
-        boxShadow: theme.dom.popoverShadow,
+        boxShadow: theme.dom.popoverShadow || '0 12px 32px rgba(0,0,0,0.28)',
         backdropFilter: theme.dom.glassBackdrop,
         fontFamily: theme.fontFamily,
         fontSize: 12,
@@ -1588,6 +1624,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
           display: 'flex',
           flexDirection: 'column',
           gap: 6,
+          flexShrink: 0,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1706,6 +1743,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
           display: 'flex',
           borderBottom: `1px solid ${theme.dom.popoverBorder}`,
           backgroundColor: theme.isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
+          flexShrink: 0,
         }}
       >
         <button
@@ -1786,7 +1824,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
       </div>
 
       {tab === 'values' ? (
-        <>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
           {/* Inline Between Date Range Selector for Date / DateTime Columns */}
           {isDateCol && (
             <div
@@ -2507,10 +2545,10 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
               })()
             )}
           </div>
-        </>
+        </div>
       ) : (
         /* Condition / Date Range (Between) Filter Tab */
-        <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div>
             <label style={{ display: 'block', fontSize: 11, color: '#8E8E93', marginBottom: 4 }}>
               {isDateCol
@@ -2806,6 +2844,7 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
           padding: '8px 12px',
           borderTop: `1px solid ${theme.dom.popoverBorder}`,
           backgroundColor: theme.isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)',
+          flexShrink: 0,
         }}
       >
         <button
@@ -2862,4 +2901,9 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
       </div>
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(popoverNode, document.body);
+  }
+  return popoverNode;
 };

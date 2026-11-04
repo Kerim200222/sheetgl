@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ColumnDef, GridPermissions } from '../types/grid';
 import { SummaryType } from '../types/group';
 import { IGridThemeTokens } from '../theme/IGridTheme';
@@ -97,13 +98,23 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
         onClose();
       }
     };
+    const handleScroll = (e: Event) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) {
+        return;
+      }
+      onClose();
+    };
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('mousedown', handleOutside, true);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', onClose);
     document.addEventListener('keydown', handleKey, true);
     return () => {
       document.removeEventListener('mousedown', handleOutside, true);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', onClose);
       document.removeEventListener('keydown', handleKey, true);
     };
   }, [onClose]);
@@ -194,23 +205,25 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
     />
   );
 
-  return (
+  const menuElement = (
     <div
       ref={menuRef}
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
       style={{
-        position: 'absolute',
+        position: 'fixed',
         left: safeLeft,
         top: safeTop,
         width: menuWidth,
-        zIndex: 180,
+        maxHeight: Math.min(viewportHeight - 20, 520),
+        overflowY: 'auto',
+        zIndex: 99999,
         backgroundColor: theme.dom.popoverBg,
         color: theme.dom.popoverText,
         border: `1px solid ${theme.dom.popoverBorder}`,
         borderRadius: 10,
-        boxShadow: theme.dom.popoverShadow,
+        boxShadow: theme.dom.popoverShadow || '0 12px 32px rgba(0,0,0,0.28)',
         backdropFilter: theme.dom.glassBackdrop,
         padding: 5,
         userSelect: 'none',
@@ -594,4 +607,9 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
       )}
     </div>
   );
+
+  if (typeof document !== 'undefined') {
+    return createPortal(menuElement, document.body);
+  }
+  return menuElement;
 };

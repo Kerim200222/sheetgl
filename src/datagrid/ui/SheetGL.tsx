@@ -4016,40 +4016,63 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         )}
 
         {/* 5. EXCEL HEADER FILTER POPOVER */}
-        {headerFilterState && (
-          <HeaderFilterPopover
-            column={headerFilterState.column}
-            anchorRect={headerFilterState.rect}
-            viewportWidth={gridSurfaceRef.current?.clientWidth || 1000}
-            theme={resolvedTheme}
-            locale={currentLocale}
-            store={store}
-            activeFilter={columnFilters[headerFilterState.column.id]}
-            baseFilter={activeBaseFilter}
-            onApply={(filterState) => {
-              handleApplyColumnFilter(headerFilterState.column.id, filterState);
-              setHeaderFilterState(null);
-            }}
-            onSort={(desc) => {
-              const colIdx = geometryRef.current.columns.findIndex(
-                (c) => c.id === headerFilterState.column.id
-              );
-              if (colIdx !== -1) {
-                handleHeaderSort(colIdx, false, desc);
+        {headerFilterState && (() => {
+          const surfaceRect = gridSurfaceRef.current?.getBoundingClientRect();
+          const popoverAnchor = surfaceRect
+            ? {
+                x: surfaceRect.left + headerFilterState.rect.x,
+                y: surfaceRect.top + headerFilterState.rect.y,
+                width: headerFilterState.rect.width,
+                height: headerFilterState.rect.height,
               }
-            }}
-            onToggleGroup={() => handleToggleGroupColumn(headerFilterState.column.id)}
-            isGrouped={groups.some((g) => g.selector === headerFilterState.column.id)}
-            onClose={() => setHeaderFilterState(null)}
-          />
-        )}
+            : headerFilterState.rect;
+
+          return (
+            <HeaderFilterPopover
+              column={headerFilterState.column}
+              anchorRect={popoverAnchor}
+              viewportWidth={typeof window !== 'undefined' ? window.innerWidth : (gridSurfaceRef.current?.clientWidth || 1000)}
+              viewportHeight={typeof window !== 'undefined' ? window.innerHeight : (gridSurfaceRef.current?.clientHeight || 800)}
+              theme={resolvedTheme}
+              locale={currentLocale}
+              store={store}
+              activeFilter={columnFilters[headerFilterState.column.id]}
+              baseFilter={activeBaseFilter}
+              onApply={(filterState) => {
+                handleApplyColumnFilter(headerFilterState.column.id, filterState);
+                setHeaderFilterState(null);
+              }}
+              onSort={(desc) => {
+                const colIdx = geometryRef.current.columns.findIndex(
+                  (c) => c.id === headerFilterState.column.id
+                );
+                if (colIdx !== -1) {
+                  handleHeaderSort(colIdx, false, desc);
+                }
+              }}
+              onToggleGroup={() => handleToggleGroupColumn(headerFilterState.column.id)}
+              isGrouped={groups.some((g) => g.selector === headerFilterState.column.id)}
+              onClose={() => setHeaderFilterState(null)}
+            />
+          );
+        })()}
 
         {/* 6. EXCEL RIGHT-CLICK CONTEXT MENU */}
-        {contextMenu && (
-          <ContextMenuOverlay
-            menu={contextMenu}
-            viewportWidth={gridSurfaceRef.current?.clientWidth || 1000}
-            viewportHeight={gridSurfaceRef.current?.clientHeight || 600}
+        {contextMenu && (() => {
+          const surfaceRect = gridSurfaceRef.current?.getBoundingClientRect();
+          const clientMenu: ContextMenuState = surfaceRect
+            ? {
+                ...contextMenu,
+                x: surfaceRect.left + contextMenu.x,
+                y: surfaceRect.top + contextMenu.y,
+              }
+            : contextMenu;
+
+          return (
+            <ContextMenuOverlay
+              menu={clientMenu}
+              viewportWidth={typeof window !== 'undefined' ? window.innerWidth : (gridSurfaceRef.current?.clientWidth || 1000)}
+              viewportHeight={typeof window !== 'undefined' ? window.innerHeight : (gridSurfaceRef.current?.clientHeight || 800)}
             theme={resolvedTheme}
             locale={currentLocale}
             permissions={permissions}
@@ -4208,7 +4231,8 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
             }
             onClose={() => setContextMenu(null)}
           />
-        )}
+        );
+      })()}
 
         {/* 6b. DETAILED SPARKLINE TREND CHART MODAL DIALOG */}
         {pdfModal && (
