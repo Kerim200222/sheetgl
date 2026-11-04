@@ -534,6 +534,8 @@ export interface GridToolbarConfig {
   showThemeSwitch?: boolean;
   /** Show Export CSV button (default: true) */
   showExportCsv?: boolean;
+  /** Show Export Excel button (default: true) */
+  showExportExcel?: boolean;
   /** Custom toolbar action items with Google Material Symbols icon support */
   customItems?: GridToolbarCustomItem[];
 }

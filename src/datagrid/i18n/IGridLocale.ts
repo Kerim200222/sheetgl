@@ -6,6 +6,7 @@ export interface IGridLocale {
   searchPlaceholder: string;
   addGroup: string;
   exportCsv: string;
+  exportExcel?: string;
   rows: string;
   columns: string;
   systemTheme: string;
