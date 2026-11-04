@@ -155,36 +155,57 @@ export class CanvasRenderer {
         const isSkeletonRow = !vRow || Boolean((vRow as any)?.data?.__isLoading || (vRow as any)?.__isLoading);
 
         if (isSkeletonRow) {
-          // 1. SCROLLABLE COLUMNS SKELETON
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(
-            geometry.totalFrozenWidth,
-            headerH,
-            Math.max(0, width - geometry.totalFrozenWidth),
-            Math.max(0, height - headerH)
-          );
-          ctx.clip();
+          // 1. CENTER SCROLLABLE COLUMNS SKELETON
+          if (geometry.centerColumns.length > 0 && centerClipWidth > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(
+              totalLeftPinnedWidth,
+              headerH,
+              centerClipWidth,
+              Math.max(0, height - headerH)
+            );
+            ctx.clip();
 
-          for (let sc = startScrollColIdx; sc <= endScrollColIdx; sc++) {
-            const colIdx = geometry.frozenColumns.length + sc;
-            const col = geometry.columns[colIdx];
-            if (!col) continue;
+            for (let sc = startCenterColIdx; sc <= endCenterColIdx; sc++) {
+              const col = geometry.centerColumns[sc];
+              if (!col) continue;
 
-            const cellX = geometry.totalFrozenWidth + geometry.scrollableColOffsets[sc] - scrollLeft;
-            SkeletonPainter.paintSkeletonCell(ctx, cellX, rowY, col.width, rowH, theme);
-          }
-          ctx.restore();
-
-          // 2. FROZEN COLUMNS SKELETON
-          let curFrozenX = rowNumW;
-          for (let fc = 0; fc < geometry.frozenColumns.length; fc++) {
-            const col = geometry.frozenColumns[fc];
-            SkeletonPainter.paintSkeletonCell(ctx, curFrozenX, rowY, col.width, rowH, theme);
-            curFrozenX += col.width;
+              const cellX = totalLeftPinnedWidth + geometry.centerColOffsets[sc] - scrollLeft;
+              SkeletonPainter.paintSkeletonCell(ctx, cellX, rowY, col.width, rowH, theme);
+            }
+            ctx.restore();
           }
 
-          // 3. ROW NUMBER GUTTER SKELETON
+          // 2. LEFT PINNED COLUMNS SKELETON
+          let curLeftX = rowNumW;
+          for (let lc = 0; lc < geometry.leftPinnedColumns.length; lc++) {
+            const col = geometry.leftPinnedColumns[lc];
+            SkeletonPainter.paintSkeletonCell(ctx, curLeftX, rowY, col.width, rowH, theme);
+            curLeftX += col.width;
+          }
+
+          // 3. RIGHT PINNED COLUMNS SKELETON
+          if (geometry.rightPinnedColumns.length > 0 && rightClipWidth > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(
+              rightPinnedStartX,
+              headerH,
+              rightClipWidth,
+              Math.max(0, height - headerH)
+            );
+            ctx.clip();
+
+            for (let rc = 0; rc < geometry.rightPinnedColumns.length; rc++) {
+              const col = geometry.rightPinnedColumns[rc];
+              const cellX = rightPinnedStartX + geometry.rightColOffsets[rc];
+              SkeletonPainter.paintSkeletonCell(ctx, cellX, rowY, col.width, rowH, theme);
+            }
+            ctx.restore();
+          }
+
+          // 4. ROW NUMBER GUTTER SKELETON
           ctx.fillStyle = theme.canvas.rowNumberBg;
           ctx.fillRect(0, rowY, rowNumW, rowH);
 
