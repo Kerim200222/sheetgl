@@ -36,31 +36,9 @@ for /f "delims=" %%u in ('call npm whoami') do set "NPM_USER=%%u"
 echo [OK] NPM kullanicisi: %NPM_USER%
 echo.
 
-REM 2. Surum secimi
+REM 2. Surum artis islemi (Varsayilan: Otomatik patch)
 set "BUMP_TYPE=%~1"
-if not "%BUMP_TYPE%"=="" goto apply_version
-
-echo Surum artis tipini secin:
-echo   [1] patch  - Hata duzeltmesi [Varsayilan]
-echo   [2] minor  - Yeni ozellik [orn: 2.1.0]
-echo   [3] major  - Koklu degisiklik
-echo   [4] Ozel surum numarasi gir [orn: 2.1.0]
-echo   [5] Mevcut surumu degistirmeden yayinla [v%CURRENT_VER%]
-echo   [6] Sadece sheetgl.truncgil.com sunucusuna deploy et [NPM atla]
-echo.
-set "CHOICE="
-set /p "CHOICE=Seciminiz [1-6, Enter=1]: "
-
-if "%CHOICE%"=="" set "CHOICE=1"
-if "%CHOICE%"=="1" set "BUMP_TYPE=patch"
-if "%CHOICE%"=="2" set "BUMP_TYPE=minor"
-if "%CHOICE%"=="3" set "BUMP_TYPE=major"
-if "%CHOICE%"=="4" set /p "BUMP_TYPE=Yeni surum numarasini girin [orn: 2.1.0]: "
-if "%CHOICE%"=="5" set "BUMP_TYPE=none"
-if "%CHOICE%"=="6" (
-    set "NEW_VER=%CURRENT_VER%"
-    goto deploy_remote
-)
+if "%BUMP_TYPE%"=="" set "BUMP_TYPE=patch"
 
 :apply_version
 if /i "%BUMP_TYPE%"=="deploy" (
@@ -70,7 +48,7 @@ if /i "%BUMP_TYPE%"=="deploy" (
 echo.
 if /i "%BUMP_TYPE%"=="none" goto keep_version
 
-echo [2/6] Surum guncelleniyor: %BUMP_TYPE% ...
+echo [2/6] Surum otomatik patch olarak arttiriliyor: %BUMP_TYPE% ...
 call npm version %BUMP_TYPE% --no-git-tag-version
 if errorlevel 1 (
     echo [HATA] Surum numarasi guncellenemedi.
@@ -86,7 +64,7 @@ echo [2/6] Mevcut surum korunuyor: v%CURRENT_VER% ...
 :version_ready
 for /f "delims=" %%v in ('node -p "require('./package.json').version"') do set "NEW_VER=%%v"
 node -e "const fs=require('fs'),v=require('./package.json').version;if(fs.existsSync('README.md')){let r=fs.readFileSync('README.md','utf8');r=r.replace(/SheetGL v\d+\.\d+\.\d+/g,'SheetGL v'+v).replace(/in v\d+\.\d+\.\d+/g,'in v'+v).replace(/version-\d+\.\d+\.\d+-/g,'version-'+v+'-');fs.writeFileSync('README.md',r);}"
-echo [OK] Yayinlanacak surum: v%NEW_VER%
+echo [OK] Yeni surum: v%NEW_VER% (onceki: v%CURRENT_VER%)
 echo.
 
 REM 3. Uretim derlemesi (Demo + Lib)
@@ -145,4 +123,3 @@ echo ===========================================================================
 popd
 pause
 endlocal
-
