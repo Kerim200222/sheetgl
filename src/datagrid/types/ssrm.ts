@@ -11,6 +11,8 @@ export interface IServerSideGetRowsRequest {
   sortModel?: any;
   /** Active filter configuration / model */
   filterModel?: any;
+  /** Active global search keyword */
+  searchKeyword?: string;
   /** Active group keys if row grouping is enabled */
   groupKeys?: string[];
 }
@@ -49,4 +51,3 @@ export interface ServerSideStoreOptions {
   /** Estimated or initial row count before server returns definitive count (default: 100) */
   initialRowCount?: number;
 }
-

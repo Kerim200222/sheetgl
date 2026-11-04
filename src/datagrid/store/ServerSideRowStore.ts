@@ -9,6 +9,7 @@ import {
   IServerSideGetRowsParams,
   ServerSideStoreOptions,
 } from '../types/ssrm';
+import { BlockCache } from '../data/BlockCache';
 
 /**
  * Enterprise Server-Side Row Model (SSRM) & Block Cache Engine.
@@ -25,7 +26,7 @@ export class ServerSideRowStore implements IDataStore {
   private isLastRowKnown: boolean = false;
   private hasInitialFetchTriggered: boolean = false;
 
-  private cache = new Map<number, any[]>();
+  private blockCache: BlockCache<any>;
   private loadingBlocks = new Set<number>();
   private pendingDebounceBlocks = new Set<number>();
   private debounceTimer: any = null;
@@ -48,6 +49,7 @@ export class ServerSideRowStore implements IDataStore {
     this.debounceMs = Math.max(0, options.debounceMs ?? 80);
     this.keyField = options.keyField ?? 'id';
     this.rowCount = Math.max(0, options.initialRowCount ?? this.blockSize);
+    this.blockCache = new BlockCache<any>(this.blockSize, this.maxBlocks);
   }
 
   // ============================================================================
@@ -58,12 +60,12 @@ export class ServerSideRowStore implements IDataStore {
    * Translates a global row index to its corresponding block index.
    */
   public getBlockIndex(rowIndex: number): number {
-    return Math.floor(rowIndex / this.blockSize);
+    return this.blockCache.getBlockIndex(rowIndex);
   }
 
   /**
    * Retrieves a single row by index. If the block is not loaded, triggers an on-demand fetch
-   * and returns a placeholder loading stub in the meantime.
+   * and returns undefined while in flight so Skeleton UI renders cleanly.
    */
   public getRow(index: number): any {
     if (index < 0 || (this.isLastRowKnown && index >= this.rowCount)) {
@@ -71,15 +73,8 @@ export class ServerSideRowStore implements IDataStore {
     }
 
     const blockIndex = this.getBlockIndex(index);
-    const block = this.cache.get(blockIndex);
-
-    if (block) {
-      // LRU refresh: move accessed block to end of Map iteration order
-      this.cache.delete(blockIndex);
-      this.cache.set(blockIndex, block);
-
-      const offset = index % this.blockSize;
-      return block[offset];
+    if (this.blockCache.hasBlock(blockIndex)) {
+      return this.blockCache.getRow(index);
     }
 
     // Trigger on-demand block fetch if missing and not currently in flight
@@ -87,18 +82,14 @@ export class ServerSideRowStore implements IDataStore {
       this.triggerFetchBlock(blockIndex);
     }
 
-    // Return loading placeholder stub for the pending row
-    return {
-      __isLoading: true,
-      [this.keyField]: `__loading_${index}`,
-    };
+    return undefined;
   }
 
   /**
    * Checks whether a specific block is currently resident in memory.
    */
   public hasBlock(blockIndex: number): boolean {
-    return this.cache.has(blockIndex);
+    return this.blockCache.hasBlock(blockIndex);
   }
 
   /**
@@ -106,6 +97,24 @@ export class ServerSideRowStore implements IDataStore {
    */
   public isBlockLoading(blockIndex: number): boolean {
     return this.loadingBlocks.has(blockIndex);
+  }
+
+  /**
+   * Checks whether an entire range of rows is resident in memory immediately.
+   * If any block is missing, immediately queues its fetch and returns false.
+   * Guards bulk clipboard, fill handle, and delete operations against modifying pending rows.
+   */
+  public ensureRangeLoadedImmediate(startRow: number, endRow: number): boolean {
+    const startBlock = this.getBlockIndex(startRow);
+    const endBlock = this.getBlockIndex(endRow);
+
+    for (let b = startBlock; b <= endBlock; b++) {
+      if (!this.blockCache.hasBlock(b)) {
+        this.triggerFetchBlock(b, true);
+        return false;
+      }
+    }
+    return true;
   }
 
   // ============================================================================
@@ -126,7 +135,7 @@ export class ServerSideRowStore implements IDataStore {
 
   public getViewRow(rowIndex: number): VirtualRow | undefined {
     const row = this.getRow(rowIndex);
-    if (!row) return undefined;
+    if (!row || row.__isLoading) return undefined;
 
     return {
       type: 'data',
@@ -136,7 +145,7 @@ export class ServerSideRowStore implements IDataStore {
   }
 
   public async ensureRange(startRow: number, endRow: number): Promise<void> {
-    if (!this.hasInitialFetchTriggered && this.cache.size === 0 && this.loadingBlocks.size === 0) {
+    if (!this.hasInitialFetchTriggered && this.blockCache.size === 0 && this.loadingBlocks.size === 0) {
       this.hasInitialFetchTriggered = true;
       this.triggerFetchBlock(0, true);
     }
@@ -146,7 +155,7 @@ export class ServerSideRowStore implements IDataStore {
 
     const missingBlocks: number[] = [];
     for (let b = startBlock; b <= endBlock; b++) {
-      if (!this.cache.has(b) && !this.loadingBlocks.has(b)) {
+      if (!this.blockCache.hasBlock(b) && !this.loadingBlocks.has(b)) {
         missingBlocks.push(b);
       }
     }
@@ -182,6 +191,7 @@ export class ServerSideRowStore implements IDataStore {
   public off(event: 'loading' | 'loaded' | 'error', callback: (...args: any[]) => void): void {
     this.listeners.get(event)?.delete(callback);
   }
+
   public subscribe(callback: () => void): () => void {
     this.subscribers.add(callback);
     return () => {
@@ -198,7 +208,6 @@ export class ServerSideRowStore implements IDataStore {
       }
     }
   }
-
 
   private emit(event: 'loading' | 'loaded' | 'error', ...args: any[]): void {
     const handlers = this.listeners.get(event);
@@ -260,6 +269,7 @@ export class ServerSideRowStore implements IDataStore {
         endRow,
         sortModel: this.currentSort,
         filterModel: this.currentFilter,
+        searchKeyword: this.currentSearch || undefined,
         groupKeys: this.currentGroupKeys.length > 0 ? this.currentGroupKeys : undefined,
       },
       success: (rows: any[], lastRow?: number) => {
@@ -280,16 +290,8 @@ export class ServerSideRowStore implements IDataStore {
   private handleFetchSuccess(blockIndex: number, rows: any[], lastRow?: number): void {
     this.loadingBlocks.delete(blockIndex);
 
-    // Apply LRU cache insertion and eviction
-    if (this.cache.has(blockIndex)) {
-      this.cache.delete(blockIndex);
-    } else if (this.cache.size >= this.maxBlocks) {
-      const oldestKey = this.cache.keys().next().value;
-      if (oldestKey !== undefined) {
-        this.cache.delete(oldestKey);
-      }
-    }
-    this.cache.set(blockIndex, rows);
+    // Store block in standard LRU cache
+    this.blockCache.setBlock(blockIndex, rows);
 
     // Dynamic row count resolution
     if (typeof lastRow === 'number' && lastRow >= 0) {
@@ -379,15 +381,15 @@ export class ServerSideRowStore implements IDataStore {
 
   public async setCell(rowKey: any, columnId: string, value: any): Promise<void> {
     // Locate the row in active cached blocks and update in memory
-    for (const [_blockIdx, rows] of this.cache.entries()) {
+    this.blockCache.forEach((rows) => {
       const found = rows.find((r) => (r[this.keyField] ?? r.id) === rowKey);
       if (found) {
         found[columnId] = value;
         this.dirtyCells.set(`${rowKey}_${columnId}`, true);
-        break;
       }
-    }
+    });
     this.emit('loaded');
+    this.notifySubscribers();
   }
 
   public isCellDirty(rowKey: any, columnId: string): boolean {
@@ -436,7 +438,7 @@ export class ServerSideRowStore implements IDataStore {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
-    this.cache.clear();
+    this.blockCache.clear();
     this.loadingBlocks.clear();
     this.pendingDebounceBlocks.clear();
     this.isLastRowKnown = false;
@@ -461,7 +463,7 @@ export class ServerSideRowStore implements IDataStore {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
-    this.cache.clear();
+    this.blockCache.clear();
     this.loadingBlocks.clear();
     this.pendingDebounceBlocks.clear();
     this.listeners.clear();
