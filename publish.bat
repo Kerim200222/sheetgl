@@ -8,11 +8,13 @@ echo   sheetgl - NPM Publish ve Canli Sunucu Deploy Araci
 echo ============================================================================
 
 for /f "delims=" %%v in ('node -p "require('./package.json').version"') do set "CURRENT_VER=%%v"
-echo Mevcut surum: v%CURRENT_VER%
+for /f "delims=" %%v in ('node -p "const [ma,mi,pa]=require('./package.json').version.split('.').map(Number);let nPa=pa+1,nMi=mi,nMa=ma;if(nPa>=10){nPa=0;nMi++;}if(nMi>=10){nMi=0;nMa++;}[nMa,nMi,nPa].join('.')"') do set "AUTO_NEXT_VER=%%v"
+echo Mevcut surum   : v%CURRENT_VER%
+echo Otomatik hedef : v%AUTO_NEXT_VER% (10 patch -^> +1 minor, 10 minor -^> +1 major)
 echo.
 
 if /i "%~1"=="--check" (
-    echo [OK] publish.bat sozdizimi ve surum okuma testi basarili: v%CURRENT_VER%
+    echo [OK] publish.bat sozdizimi ve surum okuma testi basarili: v%CURRENT_VER% -^> v%AUTO_NEXT_VER%
     popd
     exit /b 0
 )
@@ -36,31 +38,22 @@ for /f "delims=" %%u in ('call npm whoami') do set "NPM_USER=%%u"
 echo [OK] NPM kullanicisi: %NPM_USER%
 echo.
 
-REM 2. Surum artis islemi (10 patch'te minor, 10 minor'de major otomatik artar)
-set "BUMP_PARAM=%~1"
+REM 2. Otomatik Surum Artisi (Varsayilan: 10'luk basamakli otomatik patch artisi)
+set "BUMP_TYPE=%~1"
+if "%BUMP_TYPE%"=="" set "BUMP_TYPE=%AUTO_NEXT_VER%"
+if /i "%BUMP_TYPE%"=="auto" set "BUMP_TYPE=%AUTO_NEXT_VER%"
+if /i "%BUMP_TYPE%"=="patch" set "BUMP_TYPE=%AUTO_NEXT_VER%"
 
-if /i "%BUMP_PARAM%"=="deploy" (
+:apply_version
+if /i "%BUMP_TYPE%"=="deploy" (
     set "NEW_VER=%CURRENT_VER%"
     goto deploy_remote
 )
-if /i "%BUMP_PARAM%"=="none" (
-    set "NEW_VER=%CURRENT_VER%"
-    goto keep_version
-)
+echo.
+if /i "%BUMP_TYPE%"=="none" goto keep_version
 
-if "%BUMP_PARAM%"=="" goto calc_auto_ver
-if /i "%BUMP_PARAM%"=="patch" goto calc_auto_ver
-
-REM Ozel veya standart parametre (minor, major veya 2.1.0 vb.)
-set "TARGET_VER=%BUMP_PARAM%"
-goto apply_version
-
-:calc_auto_ver
-for /f "delims=" %%v in ('node -e "const [M,m,p]=require('./package.json').version.split('.').map(Number); let np=p+1,nm=m,nM=M; if(Math.floor(np/10)!==0){np=0;nm++;} if(Math.floor(nm/10)!==0){nm=0;nM++;} console.log([nM,nm,np].join('.'));"') do set "TARGET_VER=%%v"
-
-:apply_version
-echo [2/6] Surum guncelleniyor: v%CURRENT_VER% -^> v%TARGET_VER% ...
-call npm version %TARGET_VER% --no-git-tag-version
+echo [2/6] Surum otomatik guncelleniyor: v%CURRENT_VER% -^> v%BUMP_TYPE% ...
+call npm version %BUMP_TYPE% --no-git-tag-version
 if errorlevel 1 (
     echo [HATA] Surum numarasi guncellenemedi.
     popd
@@ -75,7 +68,7 @@ echo [2/6] Mevcut surum korunuyor: v%CURRENT_VER% ...
 :version_ready
 for /f "delims=" %%v in ('node -p "require('./package.json').version"') do set "NEW_VER=%%v"
 node -e "const fs=require('fs'),v=require('./package.json').version;if(fs.existsSync('README.md')){let r=fs.readFileSync('README.md','utf8');r=r.replace(/SheetGL v\d+\.\d+\.\d+/g,'SheetGL v'+v).replace(/in v\d+\.\d+\.\d+/g,'in v'+v).replace(/version-\d+\.\d+\.\d+-/g,'version-'+v+'-');fs.writeFileSync('README.md',r);}"
-echo [OK] Yeni surum: v%NEW_VER% (onceki: v%CURRENT_VER%)
+echo [OK] Yayinlanacak surum: v%NEW_VER%
 echo.
 
 REM 3. Uretim derlemesi (Demo + Lib)
