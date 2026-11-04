@@ -6,7 +6,9 @@ import { ActiveOverlayState, ColumnDef } from '../types/grid';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { GridApi } from '../core/GridApi';
-import { useGridState } from '../state';
+import { useOptionalGridState } from '../state';
+import { ThemeEngine } from '../theme/ThemeEngine';
+import { LocaleEngine } from '../i18n/LocaleEngine';
 
 export interface DynamicCellEditorProps {
   /**
@@ -105,10 +107,10 @@ export const DynamicCellEditor: React.FC<DynamicCellEditorProps> = ({
   onCommit,
   onCancel,
 }) => {
-  const gridState = useGridState();
+  const gridState = useOptionalGridState();
   const overlay = propOverlay ?? gridState?.activeOverlay;
-  const theme = propTheme ?? gridState?.resolvedTheme;
-  const locale = propLocale ?? gridState?.currentLocale;
+  const theme = propTheme ?? gridState?.resolvedTheme ?? ThemeEngine.resolve('system');
+  const locale = propLocale ?? gridState?.currentLocale ?? LocaleEngine.resolve('auto');
   const validationError = propValidationError ?? gridState?.editorValidationError;
   const isValidating = propIsValidating ?? gridState?.isEditorValidating;
   const rowData = propRowData;

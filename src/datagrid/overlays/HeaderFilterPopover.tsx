@@ -13,7 +13,9 @@ import {
 import { BLANK_FILTER_TOKEN, WITH_FILE_FILTER_TOKEN, WITHOUT_FILE_FILTER_TOKEN, FilterEngine } from '../core/FilterEngine';
 import { SortEngine } from '../core/SortEngine';
 import { MaterialIcon } from '../ui/MaterialIcon';
-import { useGridState } from '../state';
+import { useOptionalGridState } from '../state';
+import { ThemeEngine } from '../theme/ThemeEngine';
+import { LocaleEngine } from '../i18n/LocaleEngine';
 
 export interface HeaderFilterPopoverProps {
   column: ColumnDef;
@@ -409,11 +411,11 @@ export const HeaderFilterPopover: React.FC<HeaderFilterPopoverProps> = ({
   isGrouped: propIsGrouped,
   onClose,
 }) => {
-  const gridState = useGridState();
-  const theme = propTheme ?? gridState.resolvedTheme;
-  const locale = propLocale ?? gridState.currentLocale;
-  const activeFilter = propActiveFilter ?? gridState.columnFilters[column.id];
-  const isGrouped = propIsGrouped ?? gridState.groups.some((g) => g.selector === column.id);
+  const gridState = useOptionalGridState();
+  const theme = propTheme ?? gridState?.resolvedTheme ?? ThemeEngine.resolve('system');
+  const locale = propLocale ?? gridState?.currentLocale ?? LocaleEngine.resolve('auto');
+  const activeFilter = propActiveFilter ?? gridState?.columnFilters?.[column.id];
+  const isGrouped = propIsGrouped ?? (gridState?.groups ? gridState.groups.some((g) => g.selector === column.id) : false);
 
   const isTR = locale.code.startsWith('tr');
   const colType = (column.type || '').toLowerCase();

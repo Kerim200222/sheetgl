@@ -105,6 +105,9 @@ export interface GridProviderProps {
   theme?: ThemeInput;
   locale?: LocaleInput;
   permissions?: GridPermissions;
+  selectionMode?: RowSelectionMode;
+  toolbar?: boolean | GridToolbarConfig;
+  summaryRow?: boolean | GridSummaryConfig;
   selectedRowKeys?: any[] | Set<any>;
   onSortRulesChange?: (sortRules: SortDescriptor[]) => void;
   onColumnFiltersChange?: (filters: Record<string, ColumnFilterState>) => void;
@@ -121,6 +124,9 @@ export const GridProvider: React.FC<GridProviderProps> = ({
   theme,
   locale,
   permissions,
+  selectionMode,
+  toolbar,
+  summaryRow,
   selectedRowKeys,
   onSortRulesChange,
   onColumnFiltersChange,
@@ -215,6 +221,43 @@ export const GridProvider: React.FC<GridProviderProps> = ({
       dispatch({ type: 'SET_PERMISSIONS', payload: permissions });
     }
   }, [permissions]);
+
+  const prevSelectionMode = useRef(selectionMode);
+  useEffect(() => {
+    if (selectionMode !== undefined && selectionMode !== prevSelectionMode.current) {
+      prevSelectionMode.current = selectionMode;
+      dispatch({ type: 'SET_ROW_SELECTION_MODE', payload: selectionMode });
+    }
+  }, [selectionMode]);
+
+  const prevToolbar = useRef(toolbar);
+  useEffect(() => {
+    if (toolbar !== undefined && toolbar !== prevToolbar.current) {
+      prevToolbar.current = toolbar;
+      if (typeof toolbar === 'boolean') {
+        dispatch({ type: 'UPDATE_TOOLBAR_CONFIG', payload: { visible: toolbar } });
+      } else if (toolbar) {
+        dispatch({ type: 'UPDATE_TOOLBAR_CONFIG', payload: toolbar });
+      }
+    }
+  }, [toolbar]);
+
+  const prevSummaryRow = useRef(summaryRow);
+  useEffect(() => {
+    if (summaryRow !== undefined && summaryRow !== prevSummaryRow.current) {
+      prevSummaryRow.current = summaryRow;
+      if (typeof summaryRow === 'boolean') {
+        dispatch({ type: 'UPDATE_SUMMARY_CONFIG', payload: { visible: summaryRow } });
+      } else if (summaryRow) {
+        dispatch({ type: 'UPDATE_SUMMARY_CONFIG', payload: summaryRow });
+        if (summaryRow.columnSummaryTypes && store && typeof (store).setSummaryType === 'function') {
+          for (const [colId, sType] of Object.entries(summaryRow.columnSummaryTypes)) {
+            (store).setSummaryType(colId, sType);
+          }
+        }
+      }
+    }
+  }, [summaryRow, store]);
 
   const prevSelectedRowKeys = useRef(selectedRowKeys);
   useEffect(() => {
