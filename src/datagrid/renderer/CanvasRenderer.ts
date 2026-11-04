@@ -1300,7 +1300,7 @@ export class CanvasRenderer {
   private static renderSingleHeader(
     ctx: CanvasRenderingContext2D,
     col: ColumnDef,
-    colIdx: number,
+    _colIdx: number,
     x: number,
     y: number,
     w: number,

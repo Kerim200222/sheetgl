@@ -27,9 +27,7 @@ import { ColumnFilterState, FilterDescriptor, SortDescriptor } from '../types/fi
 import { GroupDescriptor, SummaryType } from '../types/group';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ThemeEngine, ThemeInput } from '../theme/ThemeEngine';
-import { GeometryEngine } from '../core/GeometryEngine';
 import { StreamingEngine } from '../core/StreamingEngine';
-import { SelectionModel } from '../core/SelectionModel';
 import { HistoryManager } from '../core/HistoryManager';
 import { ValidationEngine } from '../core/ValidationEngine';
 import { ExportEngine } from '../export/ExportEngine';
@@ -231,7 +229,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onCloneRow,
     onViewRowDetail,
     onRefresh,
-    remoteOperations,
+    remoteOperations: _remoteOperations,
     onFilterChange,
     onColumnResize,
     allowColumnReordering = true,
@@ -454,7 +452,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     geometryRef,
     columns,
     effectiveColumns,
-    setColumns,
+    setColumns: _setColumns,
     updateColumnDef: handleUpdateColumnDef,
     setColumnWidth: handleSetColumnWidth,
     getColumnWidth: handleGetColumnWidth,
@@ -464,7 +462,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     setResizingCol,
     scrollPosRef,
     scrollIndicator,
-    setScrollIndicator,
+    setScrollIndicator: _setScrollIndicator,
     handleScroll,
     ensureCellVisible,
     scrollTo,
@@ -715,10 +713,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     selectCell,
     selectRange,
     selectAll,
-    selectFullRow,
+    selectFullRow: _selectFullRow,
     moveSelection: hookMoveSelection,
     clearSelection,
-    stopDragging,
+    stopDragging: _stopDragging,
     getActiveCell,
     getSelectedRange,
   } = useGridSelection({

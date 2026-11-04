@@ -59,7 +59,7 @@ const SummaryCell: React.FC<SummaryCellProps> = ({
   allowConfiguration,
   onChangeSummaryType,
   theme,
-  locale,
+  locale: _locale,
   formatSummaryVal,
   isTR,
 }) => {
@@ -362,8 +362,8 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
   columns,
   theme,
   locale,
-  totalRowCount,
-  unfilteredRowCount,
+  totalRowCount: _totalRowCount,
+  unfilteredRowCount: _unfilteredRowCount,
   geometry,
   scrollContainerRef,
 }) => {
@@ -373,7 +373,6 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
 
   const isVisible = summaryConfig?.visible !== false;
 
-  const showTotalCount = summaryConfig?.showTotalCount !== false;
   const showSelectionStats = summaryConfig?.showSelectionStats !== false;
   const showColumnSummaries = summaryConfig?.showColumnSummaries !== false;
   const allowConfiguration = summaryConfig?.allowConfiguration !== false;

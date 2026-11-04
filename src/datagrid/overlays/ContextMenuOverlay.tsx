@@ -518,6 +518,13 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
             !canDuplicate || !isCellEditable
           )}
           {renderItem(
+            'east',
+            isTR ? 'Hücreyi Sağa Çoğalt' : 'Duplicate Cell Right',
+            'Ctrl+R',
+            onDuplicateCellRight,
+            !canDuplicate || !isCellEditable
+          )}
+          {renderItem(
             'library_add',
             isTR ? 'Satırı Klonla (Clone Row)' : 'Clone Entire Row',
             'Ctrl+Shift+D',

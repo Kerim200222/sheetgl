@@ -58,6 +58,7 @@ export interface RemoteDataStoreOptions {
 export class RemoteDataStore implements IDataStore {
   private url: string;
   private keyField: string;
+  public getKeyField(): string { return this.keyField; }
   private headers: Record<string, string>;
   private method: 'GET' | 'POST';
   private remoteOperations: Required<RemoteOperationsConfig>;

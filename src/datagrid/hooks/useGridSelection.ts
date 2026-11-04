@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { SelectionModel } from '../core/SelectionModel';
-import { CellCoords, CellRange } from '../types/grid';
+import { CellCoords } from '../types/grid';
 import { NormalizedCellRange } from '../core/GridApi';
 
 export interface UseGridSelectionOptions {

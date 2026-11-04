@@ -688,9 +688,9 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   onCommitValue,
   onCopyValue,
   onDuplicateDown,
-  onDuplicateRight,
+  onDuplicateRight: _onDuplicateRight,
   onDuplicateRow,
-  onOpenSparklineModal,
+  onOpenSparklineModal: _onOpenSparklineModal,
   theme,
   locale,
 }) => {

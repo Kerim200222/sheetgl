@@ -1,4 +1,4 @@
-import { CellCoords, CellRange } from '../types/grid';
+import { CellCoords } from '../types/grid';
 
 export interface NormalizedCellRange {
   minRow: number;
