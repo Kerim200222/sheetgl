@@ -178,7 +178,7 @@ export class CanvasRenderer {
               if (!col) continue;
 
               const cellX = totalLeftPinnedWidth + geometry.centerColOffsets[sc] - scrollLeft;
-              SkeletonPainter.paintSkeletonCell(ctx, cellX, rowY, col.width, rowH, theme);
+              SkeletonPainter.paintSkeletonCell(ctx, cellX, rowY, col.width, totalRowH, theme);
             }
             ctx.restore();
           }
@@ -187,7 +187,7 @@ export class CanvasRenderer {
           let curLeftX = rowNumW;
           for (let lc = 0; lc < geometry.leftPinnedColumns.length; lc++) {
             const col = geometry.leftPinnedColumns[lc];
-            SkeletonPainter.paintSkeletonCell(ctx, curLeftX, rowY, col.width, rowH, theme);
+            SkeletonPainter.paintSkeletonCell(ctx, curLeftX, rowY, col.width, totalRowH, theme);
             curLeftX += col.width;
           }
 
@@ -206,30 +206,30 @@ export class CanvasRenderer {
             for (let rc = 0; rc < geometry.rightPinnedColumns.length; rc++) {
               const col = geometry.rightPinnedColumns[rc];
               const cellX = rightPinnedStartX + geometry.rightColOffsets[rc];
-              SkeletonPainter.paintSkeletonCell(ctx, cellX, rowY, col.width, rowH, theme);
+              SkeletonPainter.paintSkeletonCell(ctx, cellX, rowY, col.width, totalRowH, theme);
             }
             ctx.restore();
           }
 
           // 4. ROW NUMBER GUTTER SKELETON
           ctx.fillStyle = theme.canvas.rowNumberBg;
-          ctx.fillRect(0, rowY, rowNumW, rowH);
+          ctx.fillRect(0, rowY, rowNumW, totalRowH);
 
           ctx.fillStyle = '#FF9F0A';
-          ctx.fillRect(0, rowY, 3, rowH);
+          ctx.fillRect(0, rowY, 3, totalRowH);
 
           ctx.fillStyle = theme.canvas.rowNumberText;
           ctx.font = '500 ' + (theme.fontSize - 1) + 'px ' + theme.fontFamily;
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.fillText('⟳', rowNumW / 2, rowY + rowH / 2);
+          ctx.fillText('⟳', rowNumW / 2, rowY + totalRowH / 2);
 
           ctx.strokeStyle = theme.canvas.rowNumberBorder;
           ctx.beginPath();
           ctx.moveTo(rowNumW - 0.5, rowY);
-          ctx.lineTo(rowNumW - 0.5, rowY + rowH);
-          ctx.moveTo(0, rowY + rowH - 0.5);
-          ctx.lineTo(rowNumW, rowY + rowH - 0.5);
+          ctx.lineTo(rowNumW - 0.5, rowY + totalRowH);
+          ctx.moveTo(0, rowY + totalRowH - 0.5);
+          ctx.lineTo(rowNumW, rowY + totalRowH - 0.5);
           ctx.stroke();
 
           continue;
@@ -241,7 +241,7 @@ export class CanvasRenderer {
             vRow,
             rowY,
             width,
-            rowH,
+            totalRowH,
             theme,
             locale,
             geometry.columns,
@@ -266,21 +266,27 @@ export class CanvasRenderer {
           const vRow = store.getViewRow(r);
           if (!vRow || vRow.type !== 'data') continue;
 
+          const rowRect = geometry.getRowScreenRect(r, scrollTop);
+          const rowY = rowRect.y;
+          const totalRowH = rowRect.height;
+
           const rowData = vRow.data;
-          const rowKey = rowData.id ?? r;
+          const keyField = (store as any).getKeyField?.() || (store as any).keyField || 'id';
+          const rowKey = rowData[keyField] ?? rowData.uuid ?? rowData.id ?? rowData.legacy_id ?? r;
+          const isExpanded = expandedMasterRows?.has(rowKey) ?? false;
+          const cellH = isExpanded ? rowH : totalRowH;
           const isRowInserted = store.isRowInserted?.(rowKey) ?? false;
           const isRowLoading = loadingRowKeys?.has(rowKey) ?? false;
-          const rowY = headerH + r * rowH - scrollTop;
           const isZebraRow = Boolean(resolvedZebraBg && r % 2 === 1);
           const isRowHovered = hoveredCell?.row === r;
 
           if (isZebraRow && resolvedZebraBg) {
             ctx.fillStyle = resolvedZebraBg;
-            ctx.fillRect(totalLeftPinnedWidth, rowY, centerClipWidth, rowH);
+            ctx.fillRect(totalLeftPinnedWidth, rowY, centerClipWidth, cellH);
           }
           if (isRowHovered) {
             ctx.fillStyle = resolvedRowHoverBg;
-            ctx.fillRect(totalLeftPinnedWidth, rowY, centerClipWidth, rowH);
+            ctx.fillRect(totalLeftPinnedWidth, rowY, centerClipWidth, cellH);
           }
 
           for (let sc = startCenterColIdx; sc <= endCenterColIdx; sc++) {
@@ -304,7 +310,7 @@ export class CanvasRenderer {
               cellX,
               rowY,
               col.width,
-              rowH,
+              cellH,
               theme,
               locale,
               selection,
@@ -335,25 +341,34 @@ export class CanvasRenderer {
         const vRow = store.getViewRow(r);
         if (!vRow || vRow.type !== 'data') continue;
 
+        const rowRect = geometry.getRowScreenRect(r, scrollTop);
+        const rowY = rowRect.y;
+        const totalRowH = rowRect.height;
+
         const rowData = vRow.data;
         const keyField = (store as any).getKeyField?.() || (store as any).keyField || 'id';
         const rowKey = rowData[keyField] ?? rowData.uuid ?? rowData.id ?? rowData.legacy_id ?? r;
+        const isExpanded = expandedMasterRows?.has(rowKey) ?? false;
+        const cellH = isExpanded ? rowH : totalRowH;
         const isRowInserted = store.isRowInserted?.(rowKey) ?? false;
         const isRowLoading = loadingRowKeys?.has(rowKey) ?? false;
         const isRowInActiveSel = r >= normSel.minRow && r <= normSel.maxRow;
         const isZebraRow = Boolean(resolvedZebraBg && r % 2 === 1);
         const isRowHovered = hoveredCell?.row === r;
-        const rowY = headerH + r * rowH - scrollTop;
 
         // Render Left Pinned Cells
         let curLeftX = rowNumW;
         for (let lc = 0; lc < geometry.leftPinnedColumns.length; lc++) {
           const col = geometry.leftPinnedColumns[lc];
+          if (totalRowH > cellH) {
+            ctx.fillStyle = theme.canvas.bg;
+            ctx.fillRect(curLeftX, rowY + cellH, col.width, totalRowH - cellH);
+          }
           ctx.fillStyle = isZebraRow && resolvedZebraBg ? resolvedZebraBg : theme.canvas.bg;
-          ctx.fillRect(curLeftX, rowY, col.width, rowH);
+          ctx.fillRect(curLeftX, rowY, col.width, cellH);
           if (isRowHovered) {
             ctx.fillStyle = resolvedRowHoverBg;
-            ctx.fillRect(curLeftX, rowY, col.width, rowH);
+            ctx.fillRect(curLeftX, rowY, col.width, cellH);
           }
 
           const colStyle = ColumnColorEngine.resolveColumnStyle(
@@ -371,7 +386,7 @@ export class CanvasRenderer {
             curLeftX,
             rowY,
             col.width,
-            rowH,
+            cellH,
             theme,
             locale,
             selection,
@@ -404,13 +419,11 @@ export class CanvasRenderer {
 
         if (isRowInserted) {
           ctx.fillStyle = '#30D158';
-          ctx.fillRect(0, rowY, 4, rowH);
+          ctx.fillRect(0, rowY, 4, cellH);
         } else if (isRowLoading) {
           ctx.fillStyle = '#FF9F0A';
-          ctx.fillRect(0, rowY, 4, rowH);
+          ctx.fillRect(0, rowY, 4, cellH);
         }
-
-        const isExpanded = expandedMasterRows?.has(rowKey) ?? false;
 
         if (hasMasterDetail) {
           // Draw [+] or [-] toggle indicator
@@ -465,11 +478,17 @@ export class CanvasRenderer {
           const vRow = store.getViewRow(r);
           if (!vRow || vRow.type !== 'data') continue;
 
+          const rowRect = geometry.getRowScreenRect(r, scrollTop);
+          const rowY = rowRect.y;
+          const totalRowH = rowRect.height;
+
           const rowData = vRow.data;
-          const rowKey = rowData.id ?? r;
+          const keyField = (store as any).getKeyField?.() || (store as any).keyField || 'id';
+          const rowKey = rowData[keyField] ?? rowData.uuid ?? rowData.id ?? rowData.legacy_id ?? r;
+          const isExpanded = expandedMasterRows?.has(rowKey) ?? false;
+          const cellH = isExpanded ? rowH : totalRowH;
           const isRowInserted = store.isRowInserted?.(rowKey) ?? false;
           const isRowLoading = loadingRowKeys?.has(rowKey) ?? false;
-          const rowY = headerH + r * rowH - scrollTop;
           const isZebraRow = Boolean(resolvedZebraBg && r % 2 === 1);
           const isRowHovered = hoveredCell?.row === r;
 
@@ -478,11 +497,15 @@ export class CanvasRenderer {
             const colIdx = baseRightIdx + rc;
             const cellX = rightPinnedStartX + geometry.rightColOffsets[rc];
 
+            if (totalRowH > cellH) {
+              ctx.fillStyle = theme.canvas.bg;
+              ctx.fillRect(cellX, rowY + cellH, col.width, totalRowH - cellH);
+            }
             ctx.fillStyle = isZebraRow && resolvedZebraBg ? resolvedZebraBg : theme.canvas.bg;
-            ctx.fillRect(cellX, rowY, col.width, rowH);
+            ctx.fillRect(cellX, rowY, col.width, cellH);
             if (isRowHovered) {
               ctx.fillStyle = resolvedRowHoverBg;
-              ctx.fillRect(cellX, rowY, col.width, rowH);
+              ctx.fillRect(cellX, rowY, col.width, cellH);
             }
 
             const colStyle = ColumnColorEngine.resolveColumnStyle(
@@ -500,7 +523,7 @@ export class CanvasRenderer {
               cellX,
               rowY,
               col.width,
-              rowH,
+              cellH,
               theme,
               locale,
               selection,
@@ -529,8 +552,10 @@ export class CanvasRenderer {
       // FILL HANDLE DRAG PREVIEW RECTANGLE (Excel AutoFill Dashed Box)
       // ========================================================================
       if (fillDragRange && rowCount > 0) {
-        const fTopY = headerH + fillDragRange.minRow * rowH - scrollTop;
-        const fHeight = (fillDragRange.maxRow - fillDragRange.minRow + 1) * rowH;
+        const fTopRect = geometry.getRowScreenRect(fillDragRange.minRow, scrollTop);
+        const fBottomRect = geometry.getRowScreenRect(fillDragRange.maxRow, scrollTop);
+        const fTopY = fTopRect.y;
+        const fHeight = fBottomRect.y + fBottomRect.height - fTopRect.y;
         const fLeftRect = geometry.getColumnScreenRect(fillDragRange.minCol, scrollLeft);
         const fRightRect = geometry.getColumnScreenRect(fillDragRange.maxCol, scrollLeft);
 
@@ -567,8 +592,10 @@ export class CanvasRenderer {
         normSel.minRow <= endRow &&
         normSel.maxRow >= startRow
       ) {
-        const rTopY = headerH + normSel.minRow * rowH - scrollTop;
-        const rHeight = (normSel.maxRow - normSel.minRow + 1) * rowH;
+        const rTopRect = geometry.getRowScreenRect(normSel.minRow, scrollTop);
+        const rBottomRect = geometry.getRowScreenRect(normSel.maxRow, scrollTop);
+        const rTopY = rTopRect.y;
+        const rHeight = rBottomRect.y + rBottomRect.height - rTopRect.y;
 
         const leftColRect = geometry.getColumnScreenRect(normSel.minCol, scrollLeft);
         const rightColRect = geometry.getColumnScreenRect(normSel.maxCol, scrollLeft);
