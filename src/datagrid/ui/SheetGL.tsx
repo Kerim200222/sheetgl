@@ -274,33 +274,6 @@ const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
     toastMessage,
   } = state;
 
-  // Synchronize incoming external prop changes to context actions
-  useEffect(() => {
-    if (userTheme !== undefined && userTheme !== currentThemeName) {
-      actions.setThemeName(userTheme);
-    }
-  }, [userTheme, currentThemeName, actions]);
-
-  useEffect(() => {
-    if (userLocale !== undefined) {
-      const resolved = LocaleEngine.resolve(userLocale);
-      if (resolved.code !== currentLocale.code) {
-        actions.setLocale(resolved);
-      }
-    }
-  }, [userLocale, currentLocale, actions]);
-
-  useEffect(() => {
-    if (userPermissions !== undefined && userPermissions !== permissions) {
-      actions.setPermissions(userPermissions);
-    }
-  }, [userPermissions, permissions, actions]);
-
-  useEffect(() => {
-    if (userSelectedRowKeys !== undefined) {
-      actions.setSelectedRowKeys(userSelectedRowKeys);
-    }
-  }, [userSelectedRowKeys, actions]);
 
   const setCurrentThemeName = actions.setThemeName;
   const setCurrentLocale = actions.setLocale;
@@ -4344,6 +4317,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((props, ref) => {
       theme={props.theme}
       locale={props.locale}
       permissions={props.permissions}
+      selectionMode={props.selectionMode}
+      toolbar={props.toolbar}
+      summaryRow={props.summaryRow}
       selectedRowKeys={props.selectedRowKeys}
       onColumnFiltersChange={(filters) => {
         props.onFilterChange?.(compileColumnFilters(filters), filters);

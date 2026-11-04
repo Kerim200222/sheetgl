@@ -7,7 +7,9 @@ import { FilterEngine } from '../core/FilterEngine';
 import { normalizeMultiValue } from '../columns/types/MultiSelectColumn/MultiSelectPainter';
 
 
-import { useGridState } from '../state';
+import { useOptionalGridState } from '../state';
+import { ThemeEngine } from '../theme/ThemeEngine';
+import { LocaleEngine } from '../i18n/LocaleEngine';
 
 export interface FormulaBarProps {
   activeCoords: { row: number; col: number };
@@ -696,14 +698,16 @@ export const FormulaBar: React.FC<FormulaBarProps> = ({
   theme: propTheme,
   locale: propLocale,
 }) => {
-  const gridState = useGridState();
-  const theme = propTheme ?? gridState.resolvedTheme;
-  const locale = propLocale ?? gridState.currentLocale;
-  const buttonDisplayMode = propButtonDisplayMode ?? (gridState.toolbarConfig.buttonDisplayMode || 'icon-text');
+  const gridState = useOptionalGridState();
+  const theme = propTheme ?? gridState?.resolvedTheme ?? ThemeEngine.resolve('system');
+  const locale = propLocale ?? gridState?.currentLocale ?? LocaleEngine.resolve('auto');
+  const buttonDisplayMode = propButtonDisplayMode ?? (gridState?.toolbarConfig?.buttonDisplayMode || 'icon-text');
   const canDuplicate = propCanDuplicate ?? (
-    gridState.permissions.mode !== 'read' &&
-    gridState.permissions.mode !== 'readonly' &&
-    gridState.permissions.allowDuplicating !== false
+    gridState
+      ? gridState.permissions.mode !== 'read' &&
+        gridState.permissions.mode !== 'readonly' &&
+        gridState.permissions.allowDuplicating !== false
+      : true
   );
 
   const isTR = locale?.code?.startsWith('tr');

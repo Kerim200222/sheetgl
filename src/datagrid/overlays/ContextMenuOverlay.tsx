@@ -6,7 +6,9 @@ import { IGridThemeTokens } from '../theme/IGridTheme';
 import { IGridLocale } from '../i18n/IGridLocale';
 import { MaterialIcon } from '../ui/MaterialIcon';
 
-import { useGridState } from '../state';
+import { useOptionalGridState, defaultPermissions } from '../state';
+import { ThemeEngine } from '../theme/ThemeEngine';
+import { LocaleEngine } from '../i18n/LocaleEngine';
 
 export interface ContextMenuState {
   targetType: 'cell' | 'header' | 'rownumber';
@@ -85,10 +87,10 @@ export const ContextMenuOverlay: React.FC<ContextMenuOverlayProps> = ({
   onExportCsv,
   onClose,
 }) => {
-  const gridState = useGridState();
-  const theme = propTheme ?? gridState.resolvedTheme;
-  const locale = propLocale ?? gridState.currentLocale;
-  const permissions = propPermissions ?? gridState.permissions;
+  const gridState = useOptionalGridState();
+  const theme = propTheme ?? gridState?.resolvedTheme ?? ThemeEngine.resolve('system');
+  const locale = propLocale ?? gridState?.currentLocale ?? LocaleEngine.resolve('auto');
+  const permissions = propPermissions ?? gridState?.permissions ?? defaultPermissions;
 
   const menuRef = useRef<HTMLDivElement | null>(null);
   const isTR = locale.code.startsWith('tr');
