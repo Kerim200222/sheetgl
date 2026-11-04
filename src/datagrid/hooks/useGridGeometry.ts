@@ -391,11 +391,24 @@ export function useGridGeometry({
   }, [onRequestRender]);
 
   // 6. Column Mutation Helpers
-  const updateColumnDef = useCallback((colId: string, patch: Partial<ColumnDef>) => {
-    setColumns((prev) =>
-      prev.map((c) => (c.id === colId ? { ...c, ...patch } : c))
-    );
-  }, []);
+  const updateColumnDef = useCallback(
+    (colId: string, patch: Partial<ColumnDef>) => {
+      setColumns((prev) =>
+        prev.map((c) => (c.id === colId ? { ...c, ...patch } : c))
+      );
+      if (patch.visible !== undefined) {
+        setHiddenColumns((prev) => {
+          const next = new Set(prev);
+          if (patch.visible) next.delete(colId);
+          else next.add(colId);
+          onColumnVisibilityChange?.(colId, patch.visible!, Array.from(next));
+          onRequestRender?.();
+          return next;
+        });
+      }
+    },
+    [onColumnVisibilityChange, onRequestRender]
+  );
 
   const setColumnWidth = useCallback((colId: string, width: number) => {
     updateColumnDef(colId, { width: Math.max(48, width) });
