@@ -422,6 +422,9 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
   }, [geometry, columns]);
 
   const scrollableColumns = useMemo(() => {
+    if (geometry?.centerColumns && geometry.centerColumns.length > 0) {
+      return geometry.centerColumns;
+    }
     if (geometry?.scrollableColumns && geometry.scrollableColumns.length > 0) {
       return geometry.scrollableColumns;
     }
@@ -431,12 +434,19 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
   }, [geometry, columns]);
 
   const rightPinnedColumns = useMemo(() => {
+    if (geometry?.rightPinnedColumns && geometry.rightPinnedColumns.length > 0) {
+      return geometry.rightPinnedColumns;
+    }
     return columns.filter((c) => c.pinned === 'right');
-  }, [columns]);
+  }, [geometry, columns]);
 
   const totalScrollableWidth = useMemo(() => {
     return scrollableColumns.reduce((sum, c) => sum + (c.width || 100), 0);
   }, [scrollableColumns]);
+
+  const totalRightPinnedWidth = useMemo(() => {
+    return rightPinnedColumns.reduce((sum, c) => sum + (c.width || 100), 0);
+  }, [rightPinnedColumns]);
 
   // 2. Synchronize Horizontal Scroll with Main Grid (Bi-directional, 60fps native)
   useEffect(() => {
@@ -734,10 +744,14 @@ export const SummaryFooter: React.FC<SummaryFooterProps> = ({
           {/* 3. Right Pinned Area (if any) */}
           {rightPinnedColumns.length > 0 && (
             <div
+              className="sheetgl-footer-right-pinned"
               style={{
                 display: 'flex',
                 alignItems: 'stretch',
                 flexShrink: 0,
+                width: totalRightPinnedWidth,
+                minWidth: totalRightPinnedWidth,
+                maxWidth: totalRightPinnedWidth,
                 zIndex: 10,
                 backgroundColor: theme.canvas.rowNumberBg,
                 borderLeft: `1px solid ${theme.canvas.gridLine}`,

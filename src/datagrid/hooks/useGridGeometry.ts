@@ -226,7 +226,7 @@ export function useGridGeometry({
     const pending = pendingScrollRestoreRef.current;
 
     if (sc) {
-      const totalW = geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
+      const totalW = geometryRef.current.totalLeftPinnedWidth + geometryRef.current.totalCenterWidth + geometryRef.current.totalRightPinnedWidth + 18;
       const maxLeft = Math.max(0, totalW - sc.clientWidth);
       const totalH = geometryRef.current.headerHeight + rowCount * geometryRef.current.rowHeight + 18;
       const maxTop = Math.max(0, totalH - sc.clientHeight);
@@ -274,7 +274,7 @@ export function useGridGeometry({
         requestAnimationFrame(() => {
           const domSc = scrollContainerRef.current;
           if (!domSc) return;
-          const domTotalW = geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
+          const domTotalW = geometryRef.current.totalLeftPinnedWidth + geometryRef.current.totalCenterWidth + geometryRef.current.totalRightPinnedWidth + 18;
           const domMaxLeft = Math.max(0, domTotalW - domSc.clientWidth);
           const domTotalH = geometryRef.current.headerHeight + rowCount * geometryRef.current.rowHeight + 18;
           const domMaxTop = Math.max(0, domTotalH - domSc.clientHeight);
@@ -499,11 +499,13 @@ export function useGridGeometry({
     }
 
     const colRect = geom.getColumnScreenRect(col, sc.scrollLeft);
-    if (!colRect.isFrozen) {
-      if (colRect.x < geom.totalFrozenWidth) {
-        sc.scrollLeft -= geom.totalFrozenWidth - colRect.x;
-      } else if (colRect.x + colRect.width > sc.clientWidth) {
-        sc.scrollLeft += colRect.x + colRect.width - sc.clientWidth;
+    if (!colRect.isFrozen && colRect.pinnedZone !== 'left' && colRect.pinnedZone !== 'right') {
+      const leftBound = geom.totalLeftPinnedWidth;
+      const rightBound = geom.getRightPinnedStartX();
+      if (colRect.x < leftBound) {
+        sc.scrollLeft -= leftBound - colRect.x;
+      } else if (colRect.x + colRect.width > rightBound) {
+        sc.scrollLeft += colRect.x + colRect.width - rightBound;
       }
     }
   }, []);
@@ -582,11 +584,12 @@ export function useGridGeometry({
       sc.scrollTop = Math.max(0, sc.scrollTop - 18);
     }
 
-    if (x > rect.width - edgeThreshold) {
+    const rightBound = geometryRef.current.getRightPinnedStartX();
+    if (x > rightBound - edgeThreshold) {
       sc.scrollLeft += 24;
     } else if (
-      x < geometryRef.current.totalFrozenWidth + edgeThreshold &&
-      x > geometryRef.current.totalFrozenWidth
+      x < geometryRef.current.totalLeftPinnedWidth + edgeThreshold &&
+      x > geometryRef.current.totalLeftPinnedWidth
     ) {
       sc.scrollLeft = Math.max(0, sc.scrollLeft - 24);
     }
@@ -594,7 +597,12 @@ export function useGridGeometry({
 
   // 9. Dimension Queries
   const getTotalWidth = useCallback((): number => {
-    return geometryRef.current.totalFrozenWidth + geometryRef.current.totalScrollableWidth + 18;
+    return (
+      geometryRef.current.totalLeftPinnedWidth +
+      geometryRef.current.totalCenterWidth +
+      geometryRef.current.totalRightPinnedWidth +
+      18
+    );
   }, []);
 
   const getTotalHeight = useCallback((count: number): number => {
