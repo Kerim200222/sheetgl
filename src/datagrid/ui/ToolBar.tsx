@@ -29,6 +29,7 @@ export interface ToolBarProps {
   onSearchChange?: (keyword: string) => void;
   onExportCsv?: () => void;
   onExportExcel?: () => void;
+  showExportExcel?: boolean;
   groups?: string[];
   onToggleGroupColumn?: (columnId: string) => void;
   onExpandAllGroups?: () => void;
@@ -71,6 +72,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   onSearchChange: propOnSearchChange,
   onExportCsv,
   onExportExcel,
+  showExportExcel: propShowExportExcel,
   groups: propGroups,
   onToggleGroupColumn: propOnToggleGroupColumn,
   onExpandAllGroups,
@@ -169,7 +171,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   const showLocaleSwitch = toolbarConfig?.showLocaleSwitch !== false;
   const showThemeSwitch = toolbarConfig?.showThemeSwitch !== false;
   const showExportCsv = toolbarConfig?.showExportCsv !== false;
-  const showExportExcel = toolbarConfig?.showExportExcel !== false;
+  const showExportExcel = propShowExportExcel ?? (toolbarConfig?.showExportExcel !== false);
 
   const isReadonlyMode = permissions?.mode === 'readonly' || permissions?.mode === 'read';
   const canAdd = !isReadonlyMode && permissions?.allowAdding !== false;
@@ -1265,6 +1267,11 @@ export const ToolBar: React.FC<ToolBarProps> = ({
                                 key: 'showGroupBy' as const,
                                 val: showGroupBy,
                                 label: isTR ? 'Gruplama Seçicisi' : 'Group By Selector',
+                              },
+                              {
+                                key: 'showExportExcel' as const,
+                                val: showExportExcel,
+                                label: isTR ? 'Excel Dışa Aktar' : 'Export Excel Button',
                               },
                               {
                                 key: 'showExportCsv' as const,

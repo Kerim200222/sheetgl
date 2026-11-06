@@ -13,7 +13,6 @@ import {
   createInitialGridState,
   HeaderFilterPopoverState,
   DeleteConfirmModalState,
-  ToastMessageState,
 } from './gridReducer';
 import { IDataStore } from '../types/store';
 import { SortDescriptor, ColumnFilterState } from '../types/filter';

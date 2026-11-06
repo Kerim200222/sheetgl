@@ -25,7 +25,6 @@ import {
 import { IDataStore, RemoteOperationsConfig } from '../types/store';
 import { ColumnFilterState, FilterDescriptor, SortDescriptor } from '../types/filter';
 import { GroupDescriptor, SummaryType } from '../types/group';
-import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ThemeEngine, ThemeInput } from '../theme/ThemeEngine';
 import { StreamingEngine } from '../core/StreamingEngine';
 import { HistoryManager } from '../core/HistoryManager';
@@ -36,8 +35,8 @@ import { CanvasRenderer } from '../renderer/CanvasRenderer';
 import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
 import { HeaderFilterPopover } from '../overlays/HeaderFilterPopover';
 import { ContextMenuOverlay, ContextMenuState } from '../overlays/ContextMenuOverlay';
-import { SparklineModalOverlay, SparklineModalState } from '../overlays/SparklineModalOverlay';
-import { PdfPreviewModalOverlay, PdfPreviewModalState } from '../overlays/PdfPreviewModalOverlay';
+import { SparklineModalOverlay } from '../overlays/SparklineModalOverlay';
+import { PdfPreviewModalOverlay } from '../overlays/PdfPreviewModalOverlay';
 import { BatchChangesModal } from '../overlays/BatchChangesModal';
 import { DeleteConfirmProgressModal } from '../overlays/DeleteConfirmProgressModal';
 import { ToolBar } from './ToolBar';
@@ -189,32 +188,21 @@ interface SheetGLInnerProps extends SheetGLProps {
 
 const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
   {
-    dataSource,
     store,
     columns: userColumns,
     columnGroups = [],
     groupHeaderHeight = 30,
-    theme: userTheme = 'apple-dark',
-    onThemeChange,
-    locale: userLocale,
-    onLocaleChange,
     rowHeight = 34,
     headerHeight = 38,
     initialSort = [],
     initialGroups = [],
-    permissions: userPermissions,
-    batchEditMode = true,
-    toolbar: userToolbar,
     onToolbarConfigChange,
-    summaryRow: userSummaryRow,
     onSummaryConfigChange,
     showFormulaBar = true,
     enterNavigation = 'auto',
     zebraStriping,
     rowAlternationEnabled,
-    selectionMode: userSelectionMode = 'none',
     onSelectionModeChange,
-    selectedRowKeys: userSelectedRowKeys,
     onSelectionChanged,
     onPermissionsChange,
     onPdfPreviewClick,
@@ -250,7 +238,6 @@ const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
 ) => {
   const { state, actions } = useGridContext();
   const {
-    currentThemeName,
     resolvedTheme,
     currentLocale,
     permissions,
@@ -274,10 +261,6 @@ const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
     toastMessage,
   } = state;
 
-
-  const setCurrentThemeName = actions.setThemeName;
-  const setCurrentLocale = actions.setLocale;
-  const setPermissions = actions.setPermissions;
   const handleUpdatePermissions = useCallback(
     (next: GridPermissions) => {
       actions.setPermissions(next);
@@ -325,7 +308,6 @@ const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
     [actions, state.groups]
   );
   const setColumnFilters = actions.setColumnFilters;
-  const setSearchKeyword = actions.setSearchKeyword;
 
   const setActiveOverlay = useCallback(
     (arg: ActiveOverlayState | null | ((prev: ActiveOverlayState | null) => ActiveOverlayState | null)) => {
@@ -3529,6 +3511,9 @@ const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
           }
           onSelectionModeChange?.(m);
         }}
+        onPermissionsChange={handleUpdatePermissions}
+        onUpdateToolbarConfig={handleUpdateToolbarConfig}
+        onUpdateSummaryConfig={handleUpdateSummaryConfig}
         onClearAllFilters={handleClearAllFilters}
       />
 
@@ -4208,6 +4193,7 @@ const SheetGLInner = forwardRef<GridApi, SheetGLInnerProps>((
         summaries={store.getSummaries()}
         summaryTypes={store.getSummaryTypes?.()}
         onChangeSummaryType={handleChangeSummaryType}
+        onUpdateSummaryConfig={handleUpdateSummaryConfig}
         selectionStats={selectionStats}
         columns={effectiveColumns}
         geometry={geometryRef.current}
