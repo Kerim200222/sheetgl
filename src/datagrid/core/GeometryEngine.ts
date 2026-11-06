@@ -693,45 +693,91 @@ export class GeometryEngine {
   public hitTestColumnDropTarget(
     canvasX: number,
     scrollLeft: number,
-    draggingColId: string
+    draggingColId?: string
   ): { targetColId: string; colIndex: number; position: 'before' | 'after'; indicatorX: number } | null {
     if (this.columns.length === 0) return null;
 
-    // 1. Frozen Columns
-    let curFrozenX = this.rowNumberWidth;
-    for (let i = 0; i < this.frozenColumns.length; i++) {
-      const col = this.frozenColumns[i];
-      if (col.id === '__selection__') {
-        curFrozenX += col.width;
-        continue;
+    // 1. Left Pinned Columns
+    if (canvasX < this.totalLeftPinnedWidth) {
+      let curLeftX = this.rowNumberWidth;
+      for (let i = 0; i < this.leftPinnedColumns.length; i++) {
+        const col = this.leftPinnedColumns[i];
+        if (col.id === '__selection__') {
+          curLeftX += col.width;
+          continue;
+        }
+        const w = col.width;
+        if (canvasX >= curLeftX && canvasX <= curLeftX + w) {
+          if (draggingColId && col.id === draggingColId) return null;
+          const midX = curLeftX + w / 2;
+          const position = canvasX >= midX ? 'after' : 'before';
+          const indicatorX = position === 'after' ? curLeftX + w : curLeftX;
+          return {
+            targetColId: col.id,
+            colIndex: i,
+            position,
+            indicatorX,
+          };
+        }
+        curLeftX += w;
       }
-      const w = col.width;
-      if (canvasX >= curFrozenX && canvasX <= curFrozenX + w) {
-        const midX = curFrozenX + w / 2;
-        const position = canvasX >= midX ? 'after' : 'before';
-        const indicatorX = position === 'after' ? curFrozenX + w : curFrozenX;
-        return {
-          targetColId: col.id,
-          colIndex: i,
-          position,
-          indicatorX,
-        };
-      }
-      curFrozenX += w;
+      return null;
     }
 
-    // 2. Scrollable Columns
-    for (let j = 0; j < this.scrollableColumns.length; j++) {
-      const col = this.scrollableColumns[j];
+    // 2. Right Pinned Columns (layered on top of center content)
+    const rightStartX = this.getRightPinnedStartX();
+    if (this.rightPinnedColumns.length > 0 && canvasX >= rightStartX) {
+      let curRightX = rightStartX;
+      const baseIdx = this.leftPinnedColumns.length + this.centerColumns.length;
+      for (let k = 0; k < this.rightPinnedColumns.length; k++) {
+        const col = this.rightPinnedColumns[k];
+        if (col.id === '__selection__') {
+          curRightX += col.width;
+          continue;
+        }
+        const w = col.width;
+        if (canvasX >= curRightX && canvasX <= curRightX + w) {
+          if (draggingColId && col.id === draggingColId) return null;
+          const midX = curRightX + w / 2;
+          const position = canvasX >= midX ? 'after' : 'before';
+          const indicatorX = position === 'after' ? curRightX + w : curRightX;
+          return {
+            targetColId: col.id,
+            colIndex: baseIdx + k,
+            position,
+            indicatorX,
+          };
+        }
+        curRightX += w;
+      }
+
+      const lastRightIdx = this.rightPinnedColumns.length - 1;
+      const lastRightCol = this.rightPinnedColumns[lastRightIdx];
+      if (lastRightCol && canvasX > curRightX && lastRightCol.id !== draggingColId) {
+        return {
+          targetColId: lastRightCol.id,
+          colIndex: baseIdx + lastRightIdx,
+          position: 'after',
+          indicatorX: curRightX,
+        };
+      }
+      return null;
+    }
+
+    // 3. Center Scrollable Columns
+    for (let j = 0; j < this.centerColumns.length; j++) {
+      const col = this.centerColumns[j];
       if (col.id === '__selection__') continue;
-      const colIdx = this.frozenColumns.length + j;
-      const x = this.totalFrozenWidth + this.scrollableColOffsets[j] - scrollLeft;
+      const colIdx = this.leftPinnedColumns.length + j;
+      const x = this.totalLeftPinnedWidth + this.centerColOffsets[j] - scrollLeft;
       const w = col.width;
 
       if (canvasX >= x && canvasX <= x + w) {
+        if (draggingColId && col.id === draggingColId) return null;
         const midX = x + w / 2;
         const position = canvasX >= midX ? 'after' : 'before';
-        const indicatorX = position === 'after' ? x + w : x;
+        const rawIndicatorX = position === 'after' ? x + w : x;
+        const indicatorX = Math.min(rightStartX, Math.max(this.totalLeftPinnedWidth, rawIndicatorX));
         return {
           targetColId: col.id,
           colIndex: colIdx,
@@ -741,17 +787,17 @@ export class GeometryEngine {
       }
     }
 
-    // 3. Past the rightmost scrollable column
-    if (this.scrollableColumns.length > 0) {
-      const lastIdx = this.scrollableColumns.length - 1;
-      const lastCol = this.scrollableColumns[lastIdx];
-      const lastX = this.totalFrozenWidth + this.scrollableColOffsets[lastIdx] - scrollLeft;
-      if (canvasX > lastX + lastCol.width) {
+    // 4. Past the rightmost center column (within center viewport)
+    if (this.centerColumns.length > 0) {
+      const lastIdx = this.centerColumns.length - 1;
+      const lastCol = this.centerColumns[lastIdx];
+      const lastX = this.totalLeftPinnedWidth + this.centerColOffsets[lastIdx] - scrollLeft;
+      if (canvasX > lastX + lastCol.width && lastCol.id !== draggingColId) {
         return {
           targetColId: lastCol.id,
-          colIndex: this.frozenColumns.length + lastIdx,
+          colIndex: this.leftPinnedColumns.length + lastIdx,
           position: 'after',
-          indicatorX: lastX + lastCol.width,
+          indicatorX: Math.min(rightStartX, lastX + lastCol.width),
         };
       }
     }
