@@ -4,7 +4,6 @@ import { StreamingEngine } from '../core/StreamingEngine';
 import { IDataStore } from '../types/store';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ColumnTypeRegistry } from '../columns/ColumnTypeRegistry';
-import { GroupRowPainter } from './GroupRowPainter';
 import { SkeletonPainter } from './SkeletonPainter';
 import { SortDescriptor } from '../types/filter';
 import { IGridLocale } from '../i18n/IGridLocale';
@@ -226,28 +225,6 @@ export class CanvasRenderer {
           ctx.lineTo(rowNumW, rowY + rowH - 0.5);
           ctx.stroke();
 
-          continue;
-        }
-
-        if (vRow.type === 'group' || (vRow as any).__isGroup || (vRow as any).data?.__isGroup) {
-          const groupData = (vRow as any)?.__isGroup
-            ? (vRow as any)
-            : (vRow as any)?.data?.__isGroup
-            ? (vRow as any).data
-            : vRow;
-
-          CanvasRenderer.paintGroupRowBand(
-            ctx,
-            groupData,
-            rowY,
-            width,
-            rowH,
-            theme,
-            locale,
-            geometry.columns,
-            hoveredCell?.row === r,
-            rowNumW
-          );
           continue;
         }
       }
@@ -504,6 +481,39 @@ export class CanvasRenderer {
         ctx.fillRect(rightPinnedStartX - 2, headerH, 3, height - headerH);
         ctx.restore();
       }
+
+      // --- PASS 3.5 (Full-Width Group Header Bands Over Pinned Zones) ---
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, headerH, width, Math.max(0, height - headerH));
+      ctx.clip();
+
+      for (let r = startRow; r <= endRow; r++) {
+        const vRow = store.getViewRow(r);
+        if (!vRow) continue;
+        if (vRow.type === 'group' || (vRow as any).__isGroup || (vRow as any).data?.__isGroup) {
+          const rowY = headerH + r * rowH - scrollTop;
+          const groupData = (vRow as any)?.__isGroup
+            ? (vRow as any)
+            : (vRow as any)?.data?.__isGroup
+            ? (vRow as any).data
+            : vRow;
+
+          CanvasRenderer.paintGroupRowBand(
+            ctx,
+            groupData,
+            rowY,
+            width,
+            rowH,
+            theme,
+            locale,
+            geometry.columns,
+            hoveredCell?.row === r,
+            rowNumW
+          );
+        }
+      }
+      ctx.restore();
 
       // ========================================================================
       // FILL HANDLE DRAG PREVIEW RECTANGLE (Excel AutoFill Dashed Box)
