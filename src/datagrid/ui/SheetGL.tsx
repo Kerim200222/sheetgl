@@ -606,11 +606,21 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   // Store listener
   const [storeVersion, setStoreVersion] = useState<number>(0);
   useEffect(() => {
-    const handleLoaded = () => {
+    const handleUpdate = () => {
       setStoreVersion((v) => v + 1);
+      requestRenderRef.current();
     };
-    store.on('loaded', handleLoaded);
-    return () => store.off('loaded', handleLoaded);
+    if (typeof store.subscribe === 'function') {
+      const unsubscribe = store.subscribe(handleUpdate);
+      return () => {
+        unsubscribe?.();
+      };
+    } else if (typeof store.on === 'function') {
+      store.on('loaded', handleUpdate);
+      return () => {
+        store.off?.('loaded', handleUpdate);
+      };
+    }
   }, [store]);
 
   // Persist columnFilters and sortRules changes per storageKey

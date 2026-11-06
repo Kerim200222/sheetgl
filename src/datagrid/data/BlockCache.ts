@@ -42,6 +42,14 @@ export class BlockCache<T = any> {
     return this.cache.has(blockIndex);
   }
 
+  public get size(): number {
+    return this.cache.size;
+  }
+
+  public forEach(callback: (rows: T[], blockIndex: number) => void): void {
+    this.cache.forEach((rows, blockIndex) => callback(rows, blockIndex));
+  }
+
   public clear(): void {
     this.cache.clear();
   }
