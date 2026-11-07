@@ -31,7 +31,7 @@ import { StreamingEngine } from '../core/StreamingEngine';
 import { HistoryManager } from '../core/HistoryManager';
 import { ValidationEngine } from '../core/ValidationEngine';
 import { ExportEngine } from '../export/ExportEngine';
-import { BLANK_FILTER_TOKEN, WITH_FILE_FILTER_TOKEN, WITHOUT_FILE_FILTER_TOKEN } from '../core/FilterEngine';
+import { FilterEngine, BLANK_FILTER_TOKEN, WITH_FILE_FILTER_TOKEN, WITHOUT_FILE_FILTER_TOKEN } from '../core/FilterEngine';
 import { CanvasRenderer } from '../renderer/CanvasRenderer';
 import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
 import { HeaderFilterPopover } from '../overlays/HeaderFilterPopover';
@@ -61,6 +61,10 @@ export interface SheetGLProps {
   onThemeChange?: (themeName: string) => void;
   locale?: LocaleInput;
   onLocaleChange?: (localeCode: 'tr' | 'en', locale: IGridLocale) => void;
+  /**
+   * Date format pattern (e.g. 'd/m/Y', 'd.m.Y', 'Y-m-d', 'm/d/Y'). Defaults to 'd/m/Y'.
+   */
+  dateFormat?: string;
   rowHeight?: number;
   headerHeight?: number;
   initialSort?: SortDescriptor[];
@@ -192,6 +196,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onThemeChange,
     locale: userLocale,
     onLocaleChange,
+    dateFormat,
     rowHeight = 34,
     headerHeight = 38,
     initialSort = [],
@@ -246,6 +251,16 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   useMemo(() => {
     initDefaultColumnPlugins();
   }, []);
+
+  if (dateFormat) {
+    FilterEngine.setDefaultDateFormat(dateFormat);
+  }
+
+  useEffect(() => {
+    if (dateFormat) {
+      FilterEngine.setDefaultDateFormat(dateFormat);
+    }
+  }, [dateFormat]);
 
   // 2. DataStore Adaptation
   const store = useMemo<IDataStore>(() => {

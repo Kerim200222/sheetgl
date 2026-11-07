@@ -31,11 +31,36 @@ interface CompiledSetCache {
 export class FilterEngine {
   private static inSetCache = new WeakMap<any[], CompiledSetCache>();
   private static dateFormatterCache = new Map<string, Intl.DateTimeFormat>();
+  private static defaultDateFormat: string = 'd/m/Y';
+
+  public static setDefaultDateFormat(fmt?: string): void {
+    if (fmt && typeof fmt === 'string' && fmt.trim() !== '') {
+      this.defaultDateFormat = fmt.trim();
+    }
+  }
+
+  public static getDefaultDateFormat(): string {
+    return this.defaultDateFormat;
+  }
+
+  public static formatWithPattern(parsed: ParsedDateInfo, pattern: string): string {
+    const dd = String(parsed.day).padStart(2, '0');
+    const mm = String(parsed.month).padStart(2, '0');
+    const yyyy = String(parsed.year);
+    return pattern
+      .replace(/YYYY/g, yyyy)
+      .replace(/Y/g, yyyy)
+      .replace(/MM/g, mm)
+      .replace(/m/g, mm)
+      .replace(/DD/g, dd)
+      .replace(/d/g, dd);
+  }
 
   public static formatLocalizedDate(
     val: any,
     localeCode: string = 'tr-TR',
-    includeTime: boolean = false
+    includeTime: boolean = false,
+    customFormat?: string
   ): string {
     if (val === null || val === undefined || val === '' || val === BLANK_FILTER_TOKEN) {
       return '';
@@ -43,28 +68,35 @@ export class FilterEngine {
     const parsed = this.parseDateParts(val);
     if (!parsed) return String(val);
 
-    const code = localeCode || 'tr-TR';
-    let fmt = this.dateFormatterCache.get(code);
-    if (!fmt) {
-      try {
-        fmt = new Intl.DateTimeFormat(code, {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          timeZone: 'UTC',
-        });
-      } catch {
-        fmt = new Intl.DateTimeFormat('tr-TR', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          timeZone: 'UTC',
-        });
+    const activeFormat = customFormat || this.defaultDateFormat;
+    let dateStr: string;
+
+    if (activeFormat) {
+      dateStr = this.formatWithPattern(parsed, activeFormat);
+    } else {
+      const code = localeCode || 'tr-TR';
+      let fmt = this.dateFormatterCache.get(code);
+      if (!fmt) {
+        try {
+          fmt = new Intl.DateTimeFormat(code, {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            timeZone: 'UTC',
+          });
+        } catch {
+          fmt = new Intl.DateTimeFormat('tr-TR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            timeZone: 'UTC',
+          });
+        }
+        this.dateFormatterCache.set(code, fmt);
       }
-      this.dateFormatterCache.set(code, fmt);
+      dateStr = fmt.format(new Date(parsed.startOfDayMs));
     }
 
-    const dateStr = fmt.format(new Date(parsed.startOfDayMs));
     if (includeTime) {
       const hh = String(parsed.hasTime ? parsed.hour : 9).padStart(2, '0');
       const mm = String(parsed.hasTime ? parsed.minute : 0).padStart(2, '0');

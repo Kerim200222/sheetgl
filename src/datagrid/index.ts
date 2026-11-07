@@ -69,6 +69,7 @@ export type {
   GridEventLogEntry,
 } from './types/grid';
 export { ValidationEngine, Deferred, createDeferred } from './core/ValidationEngine';
+export { FilterEngine } from './core/FilterEngine';
 export { BatchChangesModal } from './overlays/BatchChangesModal';
 export type { BatchChangesModalProps } from './overlays/BatchChangesModal';
 export type {
