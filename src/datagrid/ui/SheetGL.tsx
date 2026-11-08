@@ -1396,6 +1396,11 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         return;
       }
 
+      if (onAddNewRow) {
+        onAddNewRow();
+        return;
+      }
+
       const defaultRow: Record<string, any> = {};
       for (const col of columns) {
         if (col.id === 'id' || col.id.startsWith('__')) continue;
@@ -1445,7 +1450,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         requestRender();
       }
     },
-    [permissions, columns, onRowInserting, store, onRowInserted, currentLocale, showToast, requestRender]
+    [permissions, onAddNewRow, columns, onRowInserting, store, onRowInserted, currentLocale, showToast, requestRender]
   );
 
   const handleDuplicateRow = useCallback(
