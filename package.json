@@ -11,18 +11,23 @@
   "bugs": {
     "url": "https://github.com/umitunc/sheetgl/issues"
   },
-  "homepage": "https://github.com/umitunc/sheetgl#readme",
+  "homepage": "https://sheetgl.truncgil.com",
   "keywords": [
     "datagrid",
+    "react-datagrid",
     "webgl-datagrid",
     "canvas-datagrid",
     "excel-datagrid",
     "devextreme-datagrid",
+    "ag-grid-alternative",
     "react",
+    "typescript",
     "spreadsheet",
     "virtualized-grid",
     "data-table",
-    "high-performance"
+    "high-performance",
+    "zero-dependencies",
+    "ui-library"
   ],
   "type": "module",
   "sideEffects": false,
