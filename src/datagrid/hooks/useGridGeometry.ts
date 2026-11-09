@@ -266,7 +266,7 @@ export function useGridGeometry({
     if (sc) {
       const totalW = geometryRef.current.totalLeftPinnedWidth + geometryRef.current.totalCenterWidth + geometryRef.current.totalRightPinnedWidth + 18;
       const maxLeft = Math.max(0, totalW - sc.clientWidth);
-      const totalH = geometryRef.current.getTotalHeight(rowCount) + 18;
+      const totalH = geometryRef.current.headerHeight + geometryRef.current.getTotalHeight(rowCount) + 18;
       const maxTop = Math.max(0, totalH - sc.clientHeight);
 
       let nextLeft = sc.scrollLeft;
@@ -732,7 +732,7 @@ export function useGridGeometry({
   }, []);
 
   const getTotalHeight = useCallback((count: number): number => {
-    return geometryRef.current.getTotalHeight(count);
+    return geometryRef.current.headerHeight + geometryRef.current.getTotalHeight(count);
   }, []);
 
   return {

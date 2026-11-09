@@ -717,6 +717,10 @@ export class GeometryEngine {
       return null;
     }
     const virtualY = canvasY - this.headerHeight + scrollTop;
+    const totalRowsHeight = this.getTotalHeight(rowCount);
+    if (rowCount <= 0 || virtualY < 0 || virtualY >= totalRowsHeight) {
+      return null;
+    }
     const row = this.findRowIndexAtY(virtualY, rowCount);
     if (row < 0 || row >= rowCount) return null;
     return row;
@@ -773,6 +777,10 @@ export class GeometryEngine {
     }
 
     const virtualY = canvasY - this.headerHeight + scrollTop;
+    const totalRowsHeight = this.getTotalHeight(rowCount);
+    if (rowCount <= 0 || virtualY < 0 || virtualY >= totalRowsHeight) {
+      return null;
+    }
     const row = this.findRowIndexAtY(virtualY, rowCount);
     if (row < 0 || row >= rowCount) return null;
 
