@@ -525,7 +525,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
               const vr = getGroupedViewRow(targetViewRowIndex);
               mappedIdx = vr && vr.type === 'data' ? vr.rawIndex : undefined;
             }
-            return target.insertRow(rowData, mappedIdx);
+            return target.insertRow?.(rowData, mappedIdx);
           };
         }
         if (prop === 'duplicateRow') {
