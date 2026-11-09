@@ -4303,6 +4303,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((props, ref) => {
     initDefaultColumnPlugins();
   }, []);
 
+  if (props.dateFormat) {
+    FilterEngine.setDefaultDateFormat(props.dateFormat);
+  }
+
   // 2. DataStore Adaptation
   const store = useMemo<IDataStore>(() => {
     if (Array.isArray(props.dataSource)) {
