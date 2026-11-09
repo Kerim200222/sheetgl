@@ -27,6 +27,7 @@ import { ColumnFilterState, FilterDescriptor, SortDescriptor } from '../types/fi
 import { GroupDescriptor, SummaryType } from '../types/group';
 import { IGridThemeTokens } from '../theme/IGridTheme';
 import { ThemeEngine, ThemeInput } from '../theme/ThemeEngine';
+import { ColumnManager } from '../core/ColumnManager';
 import { StreamingEngine } from '../core/StreamingEngine';
 import { HistoryManager } from '../core/HistoryManager';
 import { ValidationEngine } from '../core/ValidationEngine';
@@ -137,6 +138,12 @@ export interface SheetGLProps {
   onCloneRow?: (rowIndex: number, rowData: Record<string, any>) => void | Promise<void>;
   onViewRowDetail?: (rowIndex: number, rowData: Record<string, any>) => void;
   onRefresh?: () => void;
+  /** Array or Set of column IDs to hide from rendering */
+  hiddenColumns?: string[] | Set<string>;
+  /** Array of column IDs defining the visual ordering of columns */
+  columnOrder?: string[];
+  /** Callback fired when a column's visibility changes */
+  onColumnVisibilityChange?: (columnId: string, visible: boolean, hiddenColumns: string[]) => void;
 
   style?: React.CSSProperties;
   className?: string;
@@ -239,6 +246,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     onColumnResize,
     allowColumnReordering = true,
     onColumnOrderChange,
+    hiddenColumns,
+    columnOrder,
+    onColumnVisibilityChange,
     storageKey,
     onScrollChange,
     onExport,
@@ -473,6 +483,11 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     getColumnWidth: handleGetColumnWidth,
     reorderColumn,
     resetColumnOrder,
+    hiddenColumns: currentHiddenColumns,
+    columnOrder: currentColumnOrder,
+    setColumnVisibility: handleSetColumnVisibility,
+    setColumnOrder: handleSetColumnOrder,
+    moveColumn: handleMoveColumn,
     resizingCol,
     setResizingCol,
     scrollPosRef,
@@ -496,6 +511,9 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     rowSelectionMode,
     rowCount: store.getRowCount(),
     storageKey,
+    hiddenColumns,
+    columnOrder,
+    onColumnVisibilityChange,
     onRequestRender: () => requestRenderRef.current(),
     onActiveOverlayClear: () => setActiveOverlay(null),
     onColumnResize,
@@ -813,7 +831,34 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
   ]);
 
   requestRenderRef.current = requestRender;
-  const openEditorRef = useRef<(row: number, col: number, initialChar?: string) => void>(() => { });
+
+  const autoSizeColumn = useCallback(
+    (columnId: string) => {
+      const geom = geometryRef.current;
+      const col = geom.columns.find((c) => c.id === columnId);
+      if (!col) return;
+      const bestFit = ColumnManager.calculateBestFitWidth(
+        col,
+        store,
+        resolvedTheme,
+        canvasRef.current?.getContext('2d')
+      );
+      handleSetColumnWidth(columnId, bestFit);
+    },
+    [store, resolvedTheme, handleSetColumnWidth]
+  );
+
+  const autoSizeAllColumns = useCallback(() => {
+    const geom = geometryRef.current;
+    const ctx = canvasRef.current?.getContext('2d');
+    geom.columns.forEach((col) => {
+      if (col.id === '__selection__') return;
+      const bestFit = ColumnManager.calculateBestFitWidth(col, store, resolvedTheme, ctx);
+      handleSetColumnWidth(col.id, bestFit);
+    });
+  }, [store, resolvedTheme, handleSetColumnWidth]);
+
+  const openEditorRef = useRef<(row: number, col: number, initialChar?: string) => void>(() => {});
 
   // ============================================================================
   // CSV & EXCEL EXPORT ENGINE
@@ -898,8 +943,23 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
       exportDataAsExcel: (filename?: string) => {
         exportExcel(filename);
       },
+      // Column Operations
+      setColumnVisibility: handleSetColumnVisibility,
+      getHiddenColumns: () => Array.from(currentHiddenColumns),
+      setColumnOrder: handleSetColumnOrder,
+      getColumnOrder: () => currentColumnOrder,
+      moveColumn: handleMoveColumn,
+      autoSizeColumn,
+      autoSizeAllColumns,
     }),
     [
+      handleSetColumnVisibility,
+      currentHiddenColumns,
+      handleSetColumnOrder,
+      currentColumnOrder,
+      handleMoveColumn,
+      autoSizeColumn,
+      autoSizeAllColumns,
       requestRender,
       selectCell,
       selectRange,
@@ -2767,6 +2827,16 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
     const geom = geometryRef.current;
     const sl = scrollPosRef.current.left;
     const st = scrollPosRef.current.top;
+
+    // Double-clicking Column Resize Handle -> Auto-Size / Best-Fit Column!
+    const resizeHit = geom.hitTestColumnResize(x, y, sl);
+    if (resizeHit) {
+      const col = geom.columns[resizeHit.colIndex];
+      if (col && col.id !== '__selection__') {
+        autoSizeColumn(col.id);
+        return;
+      }
+    }
 
     // Double-clicking Fill Handle -> duplicate down!
     const fhHit = geom.hitTestFillHandle(x, y, sl, st, selectionRef.current);

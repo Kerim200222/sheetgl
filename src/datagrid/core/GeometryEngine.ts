@@ -1,4 +1,7 @@
 import { ColumnDef, ColumnGroupDef } from '../types/grid';
+import { IDataStore } from '../types/store';
+import { IGridThemeTokens } from '../theme/IGridTheme';
+import { ColumnManager, AutoSizeOptions } from './ColumnManager';
 import { SelectionModel } from './SelectionModel';
 
 export interface HitTestResult {
@@ -686,6 +689,122 @@ export class GeometryEngine {
     return null;
   }
 
+
+  public hitTestColumnDropTarget(
+    canvasX: number,
+    scrollLeft: number,
+    draggingColId?: string
+  ): { targetColId: string; colIndex: number; position: 'before' | 'after'; indicatorX: number } | null {
+    if (this.columns.length === 0) return null;
+
+    // 1. Left Pinned Columns
+    if (canvasX < this.totalLeftPinnedWidth) {
+      let curLeftX = this.rowNumberWidth;
+      for (let i = 0; i < this.leftPinnedColumns.length; i++) {
+        const col = this.leftPinnedColumns[i];
+        if (col.id === '__selection__') {
+          curLeftX += col.width;
+          continue;
+        }
+        const w = col.width;
+        if (canvasX >= curLeftX && canvasX <= curLeftX + w) {
+          if (draggingColId && col.id === draggingColId) return null;
+          const midX = curLeftX + w / 2;
+          const position = canvasX >= midX ? 'after' : 'before';
+          const indicatorX = position === 'after' ? curLeftX + w : curLeftX;
+          return {
+            targetColId: col.id,
+            colIndex: i,
+            position,
+            indicatorX,
+          };
+        }
+        curLeftX += w;
+      }
+      return null;
+    }
+
+    // 2. Right Pinned Columns (layered on top of center content)
+    const rightStartX = this.getRightPinnedStartX();
+    if (this.rightPinnedColumns.length > 0 && canvasX >= rightStartX) {
+      let curRightX = rightStartX;
+      const baseIdx = this.leftPinnedColumns.length + this.centerColumns.length;
+      for (let k = 0; k < this.rightPinnedColumns.length; k++) {
+        const col = this.rightPinnedColumns[k];
+        if (col.id === '__selection__') {
+          curRightX += col.width;
+          continue;
+        }
+        const w = col.width;
+        if (canvasX >= curRightX && canvasX <= curRightX + w) {
+          if (draggingColId && col.id === draggingColId) return null;
+          const midX = curRightX + w / 2;
+          const position = canvasX >= midX ? 'after' : 'before';
+          const indicatorX = position === 'after' ? curRightX + w : curRightX;
+          return {
+            targetColId: col.id,
+            colIndex: baseIdx + k,
+            position,
+            indicatorX,
+          };
+        }
+        curRightX += w;
+      }
+
+      const lastRightIdx = this.rightPinnedColumns.length - 1;
+      const lastRightCol = this.rightPinnedColumns[lastRightIdx];
+      if (lastRightCol && canvasX > curRightX && lastRightCol.id !== draggingColId) {
+        return {
+          targetColId: lastRightCol.id,
+          colIndex: baseIdx + lastRightIdx,
+          position: 'after',
+          indicatorX: curRightX,
+        };
+      }
+      return null;
+    }
+
+    // 3. Center Scrollable Columns
+    for (let j = 0; j < this.centerColumns.length; j++) {
+      const col = this.centerColumns[j];
+      if (col.id === '__selection__') continue;
+      const colIdx = this.leftPinnedColumns.length + j;
+      const x = this.totalLeftPinnedWidth + this.centerColOffsets[j] - scrollLeft;
+      const w = col.width;
+
+      if (canvasX >= x && canvasX <= x + w) {
+        if (draggingColId && col.id === draggingColId) return null;
+        const midX = x + w / 2;
+        const position = canvasX >= midX ? 'after' : 'before';
+        const rawIndicatorX = position === 'after' ? x + w : x;
+        const indicatorX = Math.min(rightStartX, Math.max(this.totalLeftPinnedWidth, rawIndicatorX));
+        return {
+          targetColId: col.id,
+          colIndex: colIdx,
+          position,
+          indicatorX,
+        };
+      }
+    }
+
+    // 4. Past the rightmost center column (within center viewport)
+    if (this.centerColumns.length > 0) {
+      const lastIdx = this.centerColumns.length - 1;
+      const lastCol = this.centerColumns[lastIdx];
+      const lastX = this.totalLeftPinnedWidth + this.centerColOffsets[lastIdx] - scrollLeft;
+      if (canvasX > lastX + lastCol.width && lastCol.id !== draggingColId) {
+        return {
+          targetColId: lastCol.id,
+          colIndex: this.leftPinnedColumns.length + lastIdx,
+          position: 'after',
+          indicatorX: Math.min(rightStartX, lastX + lastCol.width),
+        };
+      }
+    }
+
+    return null;
+  }
+
   public hitTestColumnResize(
     canvasX: number,
     canvasY: number,
@@ -759,5 +878,20 @@ export class GeometryEngine {
     }
 
     return null;
+  }
+
+  /**
+   * Calculates the mathematical best-fit width for a column based on header and cell contents.
+   */
+  public calculateBestFitWidth(
+    columnId: string,
+    store: IDataStore,
+    theme: IGridThemeTokens,
+    ctx?: CanvasRenderingContext2D | null,
+    options?: AutoSizeOptions
+  ): number {
+    const col = this.columns.find((c) => c.id === columnId);
+    if (!col) return 100;
+    return ColumnManager.calculateBestFitWidth(col, store, theme, ctx, options);
   }
 }
