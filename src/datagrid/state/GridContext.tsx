@@ -254,6 +254,11 @@ export const GridProvider: React.FC<GridProviderProps> = ({
             (store).setSummaryType(colId, sType);
           }
         }
+        if (Array.isArray(summaryRow.items) && store && typeof (store).setSummaryType === 'function') {
+          for (const item of summaryRow.items) {
+            (store).setSummaryType(item.columnId, item.summaryType);
+          }
+        }
       }
     }
   }, [summaryRow, store]);
