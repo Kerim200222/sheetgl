@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { FilterEngine, BLANK_FILTER_TOKEN } from '../../src/datagrid/core/FilterEngine';
 import { FilterDescriptor } from '../../src/datagrid/types/filter';
 
@@ -215,6 +215,96 @@ describe('FilterEngine', () => {
       expect(FilterEngine.matchSearch(row, 'm3')).toBe(true);
       expect(FilterEngine.matchSearch(row, 'windows')).toBe(false);
       expect(FilterEngine.matchSearch(row, '')).toBe(true);
+    });
+  });
+
+  describe('Date Formatting and Configurable Pattern (v2.1.2+)', () => {
+    const originalDefaultFormat = FilterEngine.getDefaultDateFormat();
+
+    afterEach(() => {
+      FilterEngine.setDefaultDateFormat(originalDefaultFormat);
+    });
+
+    it('should have d/m/Y as initial default date format', () => {
+      expect(FilterEngine.getDefaultDateFormat()).toBe('d/m/Y');
+    });
+
+    it('should allow configuring default date format via setDefaultDateFormat', () => {
+      FilterEngine.setDefaultDateFormat('Y-m-d');
+      expect(FilterEngine.getDefaultDateFormat()).toBe('Y-m-d');
+
+      FilterEngine.setDefaultDateFormat('d.m.Y');
+      expect(FilterEngine.getDefaultDateFormat()).toBe('d.m.Y');
+    });
+
+    it('should ignore invalid or whitespace date formats in setDefaultDateFormat', () => {
+      FilterEngine.setDefaultDateFormat('d/m/Y');
+      FilterEngine.setDefaultDateFormat('');
+      expect(FilterEngine.getDefaultDateFormat()).toBe('d/m/Y');
+
+      FilterEngine.setDefaultDateFormat('   ');
+      expect(FilterEngine.getDefaultDateFormat()).toBe('d/m/Y');
+
+      FilterEngine.setDefaultDateFormat(undefined);
+      expect(FilterEngine.getDefaultDateFormat()).toBe('d/m/Y');
+    });
+
+    it('should format ParsedDateInfo with custom pattern via formatWithPattern', () => {
+      const parsed = {
+        year: 2026,
+        month: 5,
+        day: 9,
+        hour: 14,
+        minute: 30,
+        second: 0,
+        hasTime: true,
+        isoDate: '2026-05-09',
+        startOfDayMs: 0,
+        endOfDayMs: 0,
+        exactMs: 0,
+      };
+
+      expect(FilterEngine.formatWithPattern(parsed, 'YYYY-MM-DD')).toBe('2026-05-09');
+      expect(FilterEngine.formatWithPattern(parsed, 'd/m/Y')).toBe('09/05/2026');
+      expect(FilterEngine.formatWithPattern(parsed, 'd.m.Y')).toBe('09.05.2026');
+      expect(FilterEngine.formatWithPattern(parsed, 'm/d/Y')).toBe('05/09/2026');
+    });
+
+    it('should format localized date according to default format (d/m/Y)', () => {
+      FilterEngine.setDefaultDateFormat('d/m/Y');
+      expect(FilterEngine.formatLocalizedDate('2026-11-09')).toBe('09/11/2026');
+      expect(FilterEngine.formatLocalizedDate(new Date(2026, 10, 9))).toBe('09/11/2026');
+    });
+
+    it('should respect customFormat parameter overriding default format', () => {
+      FilterEngine.setDefaultDateFormat('d/m/Y');
+      expect(FilterEngine.formatLocalizedDate('2026-11-09', 'tr-TR', false, 'Y-m-d')).toBe(
+        '2026-11-09'
+      );
+      expect(FilterEngine.formatLocalizedDate('2026-11-09', 'tr-TR', false, 'd.m.Y')).toBe(
+        '09.11.2026'
+      );
+    });
+
+    it('should append time when includeTime is true', () => {
+      FilterEngine.setDefaultDateFormat('d/m/Y');
+      const formatted = FilterEngine.formatLocalizedDate(
+        '2026-11-09T15:45:00',
+        'tr-TR',
+        true
+      );
+      expect(formatted).toBe('09/11/2026 15:45');
+    });
+
+    it('should return empty string for null, undefined, empty string and BLANK_FILTER_TOKEN', () => {
+      expect(FilterEngine.formatLocalizedDate(null)).toBe('');
+      expect(FilterEngine.formatLocalizedDate(undefined)).toBe('');
+      expect(FilterEngine.formatLocalizedDate('')).toBe('');
+      expect(FilterEngine.formatLocalizedDate(BLANK_FILTER_TOKEN)).toBe('');
+    });
+
+    it('should return string as-is when input is not a valid date', () => {
+      expect(FilterEngine.formatLocalizedDate('not-a-date')).toBe('not-a-date');
     });
   });
 });
