@@ -322,8 +322,14 @@ export function gridReducer(state: GridUIState, action: GridAction): GridUIState
       };
 
     case 'SET_SELECTED_ROW_KEYS': {
-      const newKeys = action.payload instanceof Set ? action.payload : new Set(action.payload);
-      return { ...state, selectedRowKeys: newKeys };
+      const incoming = action.payload instanceof Set ? action.payload : new Set(action.payload);
+      if (
+        incoming.size === state.selectedRowKeys.size &&
+        Array.from(incoming).every((k) => state.selectedRowKeys.has(k))
+      ) {
+        return state;
+      }
+      return { ...state, selectedRowKeys: incoming };
     }
 
     case 'TOGGLE_ROW_KEY': {

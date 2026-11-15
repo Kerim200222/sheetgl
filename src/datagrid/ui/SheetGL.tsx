@@ -37,7 +37,7 @@ import { FilterEngine, BLANK_FILTER_TOKEN, WITH_FILE_FILTER_TOKEN, WITHOUT_FILE_
 import { CanvasRenderer } from '../renderer/CanvasRenderer';
 import { DynamicCellEditor } from '../overlays/DynamicCellEditor';
 import { HeaderFilterPopover } from '../overlays/HeaderFilterPopover';
-import { ContextMenuOverlay } from '../overlays/ContextMenuOverlay';
+import { ContextMenuOverlay, ContextMenuState } from '../overlays/ContextMenuOverlay';
 import { ActionDropdownOverlay } from '../overlays/ActionDropdownOverlay';
 import { SparklineModalOverlay } from '../overlays/SparklineModalOverlay';
 import { PdfPreviewModalOverlay } from '../overlays/PdfPreviewModalOverlay';
@@ -4886,7 +4886,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((props, ref) => {
       }
       return new LocalDataStore({
         data: props.dataSource,
-        keyField: 'id',
+        keyField: props.keyField || 'id',
         batchMode: props.batchEditMode !== false,
         initialSummaries: Object.keys(initialSummaries).length > 0 ? initialSummaries : undefined,
       });
@@ -4918,7 +4918,10 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((props, ref) => {
     const localeInput = props.locale ? LocaleEngine.resolve(props.locale) : undefined;
     return {
       sortRules: savedSortRules,
-      groups: props.initialGroups,
+      groups:
+        props.groupBy && props.groupBy.length > 0
+          ? props.groupBy.map((s) => ({ selector: s }))
+          : props.initialGroups,
       columnFilters: savedFilters,
       currentThemeName: themeInput,
       resolvedTheme: ThemeEngine.resolve(themeInput),
