@@ -314,7 +314,7 @@ export function useGridGeometry({
           if (!domSc) return;
           const domTotalW = geometryRef.current.totalLeftPinnedWidth + geometryRef.current.totalCenterWidth + geometryRef.current.totalRightPinnedWidth + 18;
           const domMaxLeft = Math.max(0, domTotalW - domSc.clientWidth);
-          const domTotalH = geometryRef.current.getTotalHeight(rowCount) + 18;
+          const domTotalH = geometryRef.current.headerHeight + geometryRef.current.getTotalHeight(rowCount) + 18;
           const domMaxTop = Math.max(0, domTotalH - domSc.clientHeight);
 
           if (hasScrollableCols && Math.abs(domSc.scrollLeft - scrollPosRef.current.left) > 1) {

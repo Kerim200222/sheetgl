@@ -2870,7 +2870,7 @@ export const SheetGL = forwardRef<GridApi, SheetGLProps>((
         x: screenRect.x,
         y,
         width: screenRect.width,
-        height: rowRect.height,
+        height: Math.min(rowRect.height, geom.rowHeight),
         column: colDef,
         initialValue: vRow.data[colDef.id],
         initialChar,

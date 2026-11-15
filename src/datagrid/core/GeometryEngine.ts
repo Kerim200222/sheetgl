@@ -786,8 +786,11 @@ export class GeometryEngine {
 
     const rowRect = this.getRowScreenRect(row, scrollTop);
     const cellScreenY = rowRect.y;
-    const rowH = rowRect.height;
+    const rowH = Math.min(rowRect.height, this.rowHeight);
     const localY = canvasY - cellScreenY;
+    if (localY < 0 || localY >= rowH) {
+      return null;
+    }
 
     // 1. Left Pinned Zone
     if (canvasX < this.totalLeftPinnedWidth) {
